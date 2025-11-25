@@ -107,7 +107,7 @@ The Reality Switch is a high‑level UX control for selecting coarse policy prof
 - Strict (Grandma),
 - Standard (Default),
 - Wild (Developer).
-Exact implementation details are defined in RFC 0003 and future tuning RFCs.
+Attestations are defined in RFC‑0003; Reality Tuner and Switch behavior is specified in RFC‑0005 (with future tuning RFCs extending thresholds).
 
 ### 3.6 Genesis Event
 A Genesis Event is a record that describes how a media artifact first entered Strata.
@@ -178,16 +178,14 @@ For hashing and signing operations (e.g., `computing packet_id`) :
 ## 5. Hashing & Identifiers
 ### 5.1 Hash Functions
 
-For `packet_id` and content addressing, implementations **SHOULD** use a strong cryptographic hash (e.g., SHA‑256 or BLAKE3).
-
-When using multihash/multibase, the hash function must be indicated explicitly.
+For `packet_id`, `genesis_id`, and other content‑addressed identifiers, implementations **MUST** use `BLAKE3-256` and include the multihash prefix to make the hash algorithm self‑describing. SHA‑256 MAY be accepted when explicitly indicated via multihash for legacy ingestion, but it MUST NOT be emitted by conformant implementations.
 
 ### 5.2 `packet_id`
 `packet_id` is a string representing a hash of the canonical Packet body (excluding `packet_id` and `signature`).
 
-Common encoding:
-- Hex string prefixed with 0x,
-- OR multibase/multihash encoding (recommended long‑term).
+Encoding:
+- Wire format **MUST** be multibase of multihash (e.g., base58btc‑encoded BLAKE3‑256 multihash).
+- Hex strings (`0x...`) are **display‑only** and **MUST NOT** be used for wire interoperability; implementations that accept them **MUST** canonicalize to multibase/multihash when re‑emitting.
 
 ### 5.3 `genesis_id`, `bootstrap_id`, etc.
 Other identifiers (e.g., `genesis_id`, `bootstrap_id`, `stake_id`) follow the same principle:
@@ -229,9 +227,14 @@ Values (initial):
 - `POST`
 - `MESSAGE`
 - `TRUST_EDGE`
+- `TRUST_REVOCATION`
 - `ATTESTATION`
 - `CONFIG`
 - `STAKE`
+- `STAKE_SLASH`
+- `KEY_EVENT`
+- `CONSENSUS_METRIC`
+- `CORRECTION`
 - Additional types may be defined by future RFCs.
 
 ## 8. Security & Privacy Notes

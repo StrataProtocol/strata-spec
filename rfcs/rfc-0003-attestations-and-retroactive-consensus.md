@@ -71,14 +71,14 @@ Attestations MAY also be sent as standalone Packets (`content.type = "ATTESTATIO
 
 ```jsonc
 {
-  "packet_id": "0xattpkt2",
+  "packet_id": "zb7...attpkt2",
   "version": 1,
   "timestamp": 1715422200,
   "author_id": "did:ngo:forensic_lab",
 
-  "content": {
-    "type": "ATTESTATION",
-    "target_packet": "0x8f2...a1",
+    "content": {
+      "type": "ATTESTATION",
+      "target_packet": "zb7...a1",
     "attestation": {
       "attestation_id": "0xatt2",
       "attestor_id": "did:ngo:forensic_lab",

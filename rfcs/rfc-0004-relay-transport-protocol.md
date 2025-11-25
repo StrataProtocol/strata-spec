@@ -57,7 +57,11 @@ Client → Relay:
   "filters": {
     "authors": ["did:strata:zero_cool"],
     "types": ["POST", "ATTESTATION"],
-    "since": 1715420000
+    "since": 1715420000,
+    "until": 1715429999,
+    "limit": 50,
+    "cursor": null,
+    "order": "asc"                 // asc|desc for historical catchup
   }
 }
 ```
@@ -68,10 +72,15 @@ Fields:
   - `authors`: list of author_ids,
   - `types`: list of content.types,
   - `since`: Unix timestamp; only return Packets with timestamp >= since.
+  - `until`: Unix timestamp upper bound for historical fetch.
+  - `limit`: maximum historical Packets to return immediately (relay MAY cap).
+  - `cursor`: opaque paging token returned by the relay in previous `EVENT`s.
+  - `order`: `asc` or `desc` for historical catchup; default `asc`.
 
 Relay behavior:
-- **MAY** send historical Packets matching filters.
+- **MAY** send up to `limit` historical Packets matching filters, ordered by `received_at`.
 - **MUST** send new matching Packets as `EVENT` messages.
+- **MUST** include a `cursor` in historical `EVENT`s to allow pagination; clients MAY re‑SUBSCRIBE with that `cursor` to continue.
 
 ### 3.2 PUBLISH
 
@@ -100,13 +109,16 @@ Relay → Client:
 {
   "type": "EVENT",
   "subscription_id": "sub-123",
-  "packet": { /* full Packet JSON */ }
+  "packet": { /* full Packet JSON */ },
+  "received_at": 1715423200,   // relay-observed timestamp
+  "cursor": "opaque-token-1"   // for pagination
 }
 ```
 
 Relays:
 - **MUST** include `subscription_id` if the Packet is delivered due to a `SUBSCRIBE`.
 - **MAY** send unsolicited `EVENT`s if client has a “default feed” subscription.
+- **MUST** include `received_at` so clients can enforce freshness and key validity (see RFC‑0002).
 
 ### 3.4 OK
 
@@ -139,7 +151,54 @@ Common codes:
 - `invalid_schema`
 - `rate_limited`
 - `blocked_author`
+- `unauthenticated`
 - `internal_error`
+
+### 3.6 UNSUBSCRIBE
+
+Client → Relay:
+
+```json
+{
+  "type": "UNSUBSCRIBE",
+  "subscription_id": "sub-123"
+}
+```
+
+Relay behavior:
+- **MUST** stop sending `EVENT`s for the given `subscription_id`.
+- **SHOULD** free any server‑side resources associated with the subscription.
+
+### 3.7 AUTH / AUTH_CHALLENGE
+
+Relay → Client (optional but RECOMMENDED):
+
+```json
+{
+  "type": "AUTH_CHALLENGE",
+  "challenge": "base64random...",
+  "server_id": "did:strata:relay_1",
+  "expires_at": 1715422000
+}
+```
+
+Client → Relay:
+
+```json
+{
+  "type": "AUTH",
+  "author_id": "did:strata:alice",
+  "challenge": "base64random...",
+  "signature": "0xSigOver(challenge || server_id)",
+  "capabilities": ["publish", "subscribe"]
+}
+```
+
+Rules:
+- Relays **SHOULD** issue `AUTH_CHALLENGE` on connect; clients that cannot authenticate remain anonymous.
+- `AUTH` **MUST** be signed with an active key for `author_id`.
+- Relays **MAY** require successful `AUTH` before accepting `PUBLISH` or counting per‑identity rate limits; otherwise respond with `ERROR code: unauthenticated`.
+- Clients **SHOULD** reuse the authenticated WebSocket for all actions instead of re‑authenticating per message.
 
 ## 4. Storage & Indexing
 
@@ -155,6 +214,8 @@ However, relays MUST:
   - `author_id`,
   - `content.type`,
   - `timestamp range`.
+- Record `received_at` (relay‑observed time) for each stored Packet and use it for ordering.
+- Support cursor‑based pagination over historical queries ordered by `received_at`.
 
 ## 5. Encryption
 
@@ -164,10 +225,31 @@ However, relays MUST:
   - `content` MAY be plaintext.
   - Provenance, attestations, and metadata are visible.
 - Private messages (`content.type = "MESSAGE"`):
-  - `content` SHOULD be end‑to‑end encrypted.
+  - `content` MUST be end‑to‑end encrypted.
+  - Recommended baseline:
+    - Key agreement: X25519,
+    - AEAD: XChaCha20‑Poly1305,
+    - KDF: HKDF‑SHA256,
+    - Forward secrecy: Double Ratchet or MLS session per conversation.
+  - Envelope shape (per Packet):
+```jsonc
+{
+  "type": "MESSAGE",
+  "encryption": {
+    "scheme": "x25519-xchacha20poly1305-dratchet-v1",
+    "recipients": [
+      {
+        "id": "did:strata:bob",
+        "header": "base64encoded_dh_and_ratchet_state",
+        "ciphertext": "base64ciphertext"
+      }
+    ]
+  }
+}
+```
   - Relays should see only:
     - Encrypted blob,
-    - Metadata necessary for routing (e.g. recipients’ DIDs, possibly encrypted).
+    - Minimal routing metadata (recipient DIDs or blinded tokens if possible).
 
 ### 5.2 Opaque Payload Handling
 
@@ -191,6 +273,16 @@ It is recommended that:
 - Relay policies be documented and public,
 - Relay operators publish basic policy summaries (e.g., in a manifest).
 
+### 6.1 Rate Limiting Semantics
+
+- When a request is rate limited, relays **MUST** respond with `ERROR code: rate_limited` and include:
+  - `retry_after` (seconds),
+  - `limit` (requests allowed per window, optional),
+  - `remaining` (optional),
+  - `window_seconds` (optional).
+- Rate limits MAY be scoped to authenticated identity (preferred) or IP address (fallback).
+- Clients **SHOULD** distinguish `rate_limited` from other failures and back off accordingly.
+
 ## 7. Security Considerations
 
 Traffic correlation:
@@ -199,6 +291,10 @@ Denial‑of‑Service:
 - Relays SHOULD implement rate limits and basic DoS protections.
 Abuse:
 - Relays may be used to distribute harmful content; operators need legal strategies.
+- Authentication:
+  - `AUTH` is optional but recommended; unauthenticated connections should be sandboxed and more tightly rate‑limited.
+- Replay:
+  - Relays **MUST** drop duplicate `packet_id`s and honor `expires_at`/freshness from RFC‑0002 to prevent replay amplification.
 
 ## 8. Backwards Compatibility
 

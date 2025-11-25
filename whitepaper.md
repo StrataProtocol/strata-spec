@@ -471,6 +471,41 @@ To avoid dependence on a single domain (e.g. `strata.xyz`), Strata uses:
   - Basic metadata.
 - Hosted on arbitrary URLs; mirrored widely.
 
+Reference shape:
+
+```jsonc
+{
+  "bootstrap_id": "zb7...multihash",
+  "version": 1,
+  "issued_at": 1715420000,
+  "expires_at": 1718012000,
+  "relays": [
+    {"id": "did:strata:relay_1", "url": "wss://relay1.example", "fingerprint": "base64certfp"}
+  ],
+  "seed_gatekeepers": [
+    {"id": "did:strata:foundation", "diversity_tags": ["region:global", "org:foundation"]},
+    {"id": "did:strata:press_ng_eu", "diversity_tags": ["region:eu", "org:ngo"]}
+  ],
+  "hardware_roots": [
+    {"id": "did:hardware-root:2025", "public_key": "base64...", "description": "camera vendor roots"}
+  ],
+  "model_roots": [
+    {"id": "did:model-root:lab_a", "public_key": "base64..."}
+  ],
+  "signatures": [
+    {"issuer": "did:strata:foundation", "signature": "0x...", "diversity_tags": ["region:global","org:foundation"]},
+    {"issuer": "did:strata:press_ng_eu", "signature": "0x...", "diversity_tags": ["region:eu","org:ngo"]},
+    {"issuer": "did:strata:tech_collective", "signature": "0x...", "diversity_tags": ["region:na","org:collective"]}
+  ]
+}
+```
+
+Validation rules:
+- `bootstrap_id` = `multihash(blake3-256(canonical_doc))`.
+- Accept only if at least 3 signatures are present and diversity tags are not all in the same region/org class.
+- `expires_at` prevents stale capture; clients SHOULD fetch successors before expiry and fail closed on expired documents.
+- Documents can be mirrored via HTTPS, IPFS, or any static channel; clients SHOULD keep a cache and display provenance of the selected bootstrap set.
+
 ### 10.2 Gatekeepers / Introducers
 
 - Gatekeepers are StrataIDs (organizations or communities) that:

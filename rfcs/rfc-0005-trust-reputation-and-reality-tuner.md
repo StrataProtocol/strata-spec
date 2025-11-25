@@ -62,6 +62,15 @@ where w_seed + w_wot + w_stake + w_egal = 1
 ### 4.1 Seed Trust
 - Seeds are StrataIDs configured in Bootstrap Documents.
 - Seed distrust (e.g., external forks) is possible; clients MAY ignore specific seeds.
+- Bootstrap Documents (whitepaper §10.1) **MUST** be:
+  - Content‑addressed (`bootstrap_id = multihash(blake3-256(doc))`),
+  - Signed by at least 3 distinct gatekeepers with different `diversity_tags` (e.g., region/org_type),
+  - Versioned with `issued_at` and `expires_at` to avoid stale hijacks.
+- Bootstrap Document contents **MUST** include:
+  - `relays` list with relay DIDs and URLs,
+  - `seed_gatekeepers` (StrataIDs used for `T_seed`),
+  - `hardware_roots` and `model_roots` for genesis attestation chains.
+- Clients **MUST** validate signatures against known gatekeeper keys and fail closed if signatures fall below threshold or diversity requirements.
 
 `T_seed(i)` could be:
 - The maximum or sum of trust edges from seed identities toward i, normalized.
@@ -82,10 +91,20 @@ where w_seed + w_wot + w_stake + w_egal = 1
   "staker": "did:strata:foundation",
   "beneficiary": "did:strata:journalists_guild",
   "amount": "1000.0",
-  "asset": "STRATA",
+  "asset": {
+    "symbol": "STRATA",
+    "chain": "solana-mainnet",          // or "offchain-escrow"
+    "decimals": 9
+  },
   "locked_until": 1718023000,
   "purpose": "reputation_boost",
   "created_at": 1715421500,
+  "proof": {
+    "type": "onchain-tx",
+    "tx_id": "5Yg...Tx",
+    "block_height": 123456,
+    "proof_blob": "base64merkleproof..."
+  },
   "signature": "0xStakerSig..."
 }
 ```
@@ -93,6 +112,12 @@ Possible formula:
 `T_stake(i) = f( Σ sqrt(amount_by_distinct_stakers) )`, where:
 - Multiple diverse stakers increase trust,
 - Single whales have diminishing returns.
+
+Rules:
+- `asset` MUST specify chain/context; unknown assets are ignored.
+- `proof` MUST be provided; without a verifiable proof the stake entry is advisory only and should be down‑weighted to zero.
+- Slashing is expressed via Packets with `content.type = "STAKE_SLASH"` referencing `stake_id` and carrying evidence; slashing events **MUST** be signed by an authorized slasher identity declared in the original stake or by community policy.
+- `locked_until` is enforced by verifying the underlying proof; clients **MUST** treat premature unlocks as slashable events.
 
 ### 4.4 Egalitarian / Behavioral
 `T_egal(i)` may consider:
@@ -112,11 +137,17 @@ Key techniques:
 ### 5.1 Age Gating
 - New identities have capped influence for a grace period `G` (e.g. 30 days).
 - During `G`, `T_wot(i)` and `T_stake(i)` contributions are limited.
+- Age is measured using the earliest relay‑observed `received_at` for Packets from the identity, not author‑supplied timestamps.
 
 ### 5.2 Trust Budgets
 - Each identity has a trust budget per time window:
     - Can only issue strong trust edges to a limited number of new identities.
 - Prevents a single identity from anointing a large number of bots quickly.
+- Reference parameters (implementations MAY tune):
+  - `B_high` = 20 edges with `strength > 0.5` per 24h (rolling) per identity.
+  - `B_low` = 100 edges with `strength <= 0.5` per 24h.
+  - Revocations (`TRUST_REVOCATION`) do not refund the budget immediately; credit is restored after the same window to prevent wash‑trading.
+- Relays **SHOULD** enforce budgets at ingest; clients **MUST** down‑weight edges beyond budget to zero.
 
 ### 5.3 Cluster Detection
 - Identify dense subgraphs with high internal trust but low external edges.
@@ -189,6 +220,10 @@ Thresholds (`T_green_min`, etc.) are implementation‑specific.
 - Reputation systems:
     - Can be gamed; algorithms must be monitored and iterated.
     - Should be transparent enough for community auditing.
+- Seed abuse:
+    - Bootstrap Documents must meet signature/diversity thresholds; clients should surface provenance of seeds to users.
+- Stake forgery:
+    - Stake entries without verifiable proofs or slashing rules MUST be treated as zero weight.
 - Privacy:
     - Publishing trust edges reveals social connections.
     - Clients SHOULD offer options for private/local trust edges not shared publicly.

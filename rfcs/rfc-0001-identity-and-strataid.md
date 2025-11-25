@@ -94,6 +94,20 @@ Strata does not mandate a specific DID Document registry; DID Documents can be:
 - Anchored in external systems (blockchains, key servers),
 - Distributed through bootstrap documents.
 
+### 3.3 DID Resolution & Distribution
+
+Clients **MUST** follow a deterministic resolution order to avoid split‑brain identity views:
+
+1. Check locally cached DID Document referenced by its multihash (`did_doc_hash`) seen within a freshness window.
+2. Query bootstrap documents (whitepaper §10.1) and relay manifests for `did_doc_hash` pointers for the target DID.
+3. Fetch the content‑addressed DID Document by `did_doc_hash` from relays or other stores.
+
+Rules:
+- DID Documents **MUST** be content‑addressed; `did_doc_hash = multihash(blake3-256(canonical_did_doc))`.
+- Updates **MUST** be monotonic and linked via `prev_did_doc_hash` to allow replay/rollback protection.
+- If multiple heads exist for the same DID (conflict), clients **MUST** fail closed and surface the conflict instead of guessing.
+- Relay operators **SHOULD** gossip `did_doc_hash` updates alongside identity‑scoped packets to speed propagation.
+
 ### 4 Cryptographic Primitives
 
 Implementations **MUST** support:
@@ -135,6 +149,31 @@ The protocol supports:
   All such keys are controlled by the same user.
 
 Recovery mechanisms (social recovery, encrypted backups) are left to client implementations but SHOULD be surfaced in user interfaces.
+
+### 5.4 Revocation & Validity Windows
+
+- Every verification method in a DID Document **MUST** carry `valid_from` and **SHOULD** carry `valid_until` to bound signature usability.
+- Revocation/rotation events are represented as Packets with `content.type = "KEY_EVENT"`:
+
+```jsonc
+{
+  "type": "KEY_EVENT",
+  "event": "ADD",                 // ADD | ROTATE | REVOKE
+  "key_id": "did:strata:alice#keys-2",
+  "public_key_multibase": "z6MkfQ...",
+  "valid_from": 1715421000,
+  "valid_until": 0,               // 0 = open-ended
+  "revoked_at": null,             // set when event = REVOKE
+  "replaces": "did:strata:alice#keys-1",
+  "reason": "device_compromised"
+}
+```
+
+Rules:
+- `KEY_EVENT` Packets **MUST** be signed by an existing non‑revoked key (or a designated offline recovery key) and **MUST** be gossiped even if they revoke the signing key.
+- Relays **MUST** index `KEY_EVENT` by `author_id` and serve the latest chain to verifiers; clients **MUST** fetch and apply key events before accepting new signatures.
+- A Packet signature is valid only if the relay‑observed receive time is within `[valid_from − clock_skew, min(valid_until, revoked_at) + clock_skew]` for the signing key. Back‑dated `timestamp` fields do **NOT** extend validity.
+- Revoked keys **MUST** be treated as unusable for new packets immediately after `revoked_at`; previously received packets remain valid only if they arrived before `revoked_at + clock_skew`.
 
 ### 6. Multiple Personas
 
@@ -179,24 +218,55 @@ This is embedded in a Packet:
 
 Packet MUST be signed by `from`’s key.
 
+The Packet signature covers the trust edge content; a secondary `edge_signature` field is OPTIONAL and, if present, MUST match the Packet signature scope. `created_at` SHOULD equal the Packet’s `timestamp`; if they differ, clients use the Packet `timestamp` for freshness and deduplication.
+
 #### 7.2 Semantics
 
 - `strength` is a subjective measure (0–1) of how strongly `from` vouches for `to`.
 - `context` is descriptive metadata (friend, colleague, source, etc.).
 - Clients are free to interpret edges according to their own reputation algorithms (see RFC‑0005).
 
-Trust edges are append‑only; revocations or changes can be modeled as new edges with different strength values or as special revocation edges.
+Trust edges are append‑only; revocations or changes MUST be expressed as new packets, not silent edits.
+
+#### 7.3 Revocation & Updates
+
+Explicit revocation uses `content.type = "TRUST_REVOCATION"`:
+
+```jsonc
+{
+  "type": "TRUST_REVOCATION",
+  "from": "did:strata:alice",
+  "to": "did:strata:bob",
+  "revokes": ["0xedge1"],        // packet_ids being revoked (optional)
+  "reason": "compromised_key",
+  "created_at": 1715422000
+}
+```
+
+Rules:
+- `author_id` MUST equal `from`; the Packet MUST be signed by `from`’s non‑revoked key.
+- Revocation MUST set the effective strength from `from -> to` to zero for all earlier trust edges with `created_at <= revocation.created_at`. A `strength: 0` `TRUST_EDGE` **is not** a revocation.
+- Clients **MUST** ignore attempts to increase strength inside a `TRUST_REVOCATION`.
+
+#### 7.4 Budgets & Abuse Controls
+
+To limit wash‑trading and Sybil inflation:
+- Clients and relays **SHOULD** enforce per‑identity trust budgets (see RFC‑0005 §5.2):
+  - Default budget: at most 20 edges with `strength > 0.5` per rolling 24h window.
+  - Attempts beyond the budget **SHOULD** be rejected or heavily down‑weighted.
+- Relays **MUST** rate‑limit `TRUST_EDGE` and `TRUST_REVOCATION` packets per identity to reduce spam/DoS.
 
 ### 8. Security Considerations
 
-- Compromised key s:
-  - A compromised key can impersonate an identity until rotated.
-  - Clients **SHOULD** support key revocation lists and rotation events.
-- Privacy:
+- Compromised keys:
+  - A compromised key can impersonate an identity until revoked.
+  - Clients and relays **MUST** enforce `KEY_EVENT` revocations using relay‑observed time, not author‑supplied timestamps.
+- Trust edge abuse:
   - Trust edges reveal aspects of a user’s social graph.
   - Clients **SHOULD** allow users to:
     - Keep some trust edges private,
     - Limit publication of edges by default.
+  - Wash‑trading is mitigated via explicit revocation packets and enforced trust budgets.
 
 ### 9. Backwards Compatibility
 
