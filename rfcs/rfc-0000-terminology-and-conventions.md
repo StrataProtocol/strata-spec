@@ -198,6 +198,14 @@ Other identifiers (e.g., `genesis_id`, `bootstrap_id`, `stake_id`) follow the sa
 - RFCs sometimes use descriptive names like `created_at`, `issued_at`, `capture_timestamp`; these all represent epoch seconds.
 - Clients MAY display localized times to users, but MUST store and process epoch seconds on the wire.
 
+### 6.1 Clock Skew Tolerance
+
+- Strata uses a shared tolerance parameter `clock_skew_seconds` for time-window checks (e.g., signature validity, freshness).
+- **Default:** `clock_skew_seconds = 300` (5 minutes).
+- **Bounds:** Implementations **MUST** keep `clock_skew_seconds` within `[60, 300]` seconds for interoperability; values outside this range **MUST** be ignored in favor of the default.
+- **Overrides:** Bootstrap documents and relay manifests **MAY** publish `clock_skew_seconds`; clients/relays **MUST** converge on the same value by clamping to the bounds above and preferring bootstrap configuration over local defaults.
+- All references to `clock_skew` or `clock_skew_seconds` in other RFCs refer to this parameter unless explicitly stated otherwise.
+
 ## 7. Enumerations & String Constants
 Strata frequently uses string constants for enums. Unless otherwise specified:
 - Enums are case‑sensitive.

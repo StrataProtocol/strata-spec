@@ -199,6 +199,7 @@ Rules:
 - `AUTH` **MUST** be signed with an active key for `author_id`.
 - Relays **MAY** require successful `AUTH` before accepting `PUBLISH` or counting per‑identity rate limits; otherwise respond with `ERROR code: unauthenticated`.
 - Clients **SHOULD** reuse the authenticated WebSocket for all actions instead of re‑authenticating per message.
+- Challenge validity: `expires_at` **MUST** allow at least 60 seconds of validity; recommended default is 120 seconds and **SHOULD NOT** exceed 10 minutes. Relays **MUST** reject shorter windows, and clients **SHOULD** retry with a fresh challenge if one expires mid‑handshake (use small randomized backoff to avoid thundering herds).
 
 ## 4. Storage & Indexing
 

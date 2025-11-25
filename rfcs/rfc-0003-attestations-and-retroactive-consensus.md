@@ -102,6 +102,27 @@ Clients SHOULD:
 - Index standalone attestations by `target_packet`,
 - Merge embedded and external attestations for decision making.
 
+### 3.3 Attestation Retraction Packet
+
+An attestor may retract one of its own attestations using `content.type = "ATTESTATION_RETRACTION"`:
+
+```jsonc
+{
+  "content": {
+    "type": "ATTESTATION_RETRACTION",
+    "target_packet": "zb7...a1",
+    "attestation_id": "0xatt2",
+    "reason": "erroneous model output"
+  },
+  "signature": "0xAttestorSignature..."
+}
+```
+
+Rules:
+- Only the original attestor (matching the attested packet’s `attestor_id` / `author_id`) **MAY** issue a retraction; others are informational only and MUST NOT affect quorum weight.
+- A retraction zeros the referenced attestation’s weight in quorum/reputation calculations while preserving auditability of the original claim.
+- If multiple retractions exist from the attestor, the latest by relay‑observed `received_at` wins (tie‑break by lexicographically smallest `packet_id`).
+
 ## 4. Claim Types
 
 The `subject` field identifies what is being claimed. Recommended initial enumeration:
@@ -173,7 +194,8 @@ Let:
 
 - `P` = target packet,
 - `A_support` = set of attestations about `P` supporting a particular claim `C` (e.g., `MANIPULATED`),
-- `R_total(i)` = reputation score of attestor `i` (see RFC‑0005).
+  - `R_total(i)` = reputation score of attestor `i` (see RFC‑0005).
+- `A_support` **MUST** exclude attestations that have been retracted (via `ATTESTATION_RETRACTION` or `CORRECTION action: "retract"`).
 
 A client defines a **quorum** for claim `C` when:
 

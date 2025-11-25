@@ -479,6 +479,7 @@ Reference shape:
   "version": 1,
   "issued_at": 1715420000,
   "expires_at": 1718012000,
+  "clock_skew_seconds": 300,
   "relays": [
     {"id": "did:strata:relay_1", "url": "wss://relay1.example", "fingerprint": "base64certfp"}
   ],
@@ -503,6 +504,8 @@ Reference shape:
 Validation rules:
 - `bootstrap_id` = `multihash(blake3-256(canonical_doc))`.
 - Accept only if at least 3 signatures are present and diversity tags are not all in the same region/org class.
+- Diversity tags **MUST** be anchored to verifiable evidence (e.g., DNS TXT for a domain, legal entity ID + jurisdiction, or verifiable credential). Diversity is counted by unique anchors, not just tag strings; if anchors collapse to one actor, fail closed.
+- `clock_skew_seconds` (if present) **MUST** be within `[60, 300]`; otherwise ignore it and fall back to the default in RFC‑0000.
 - `expires_at` prevents stale capture; clients SHOULD fetch successors before expiry and fail closed on expired documents.
 - Documents can be mirrored via HTTPS, IPFS, or any static channel; clients SHOULD keep a cache and display provenance of the selected bootstrap set.
 

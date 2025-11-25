@@ -143,6 +143,10 @@ The protocol supports:
 - **Key rotation:**
   - DID Documents can list new verification methods and deprecate old ones.
   - Packets include the author’s DID; signature verification uses the current or historical keys.
+- **Recovery keys:**
+  - DID Documents **MAY** declare dedicated recovery verification methods (e.g., `usage: "recovery"`).
+  - Recovery keys **MUST** be offline or hardware-backed and **MUST NOT** sign application Packets; their only allowed use is signing `KEY_EVENT` packets when all online keys are lost or revoked.
+  - Clients/relays **MUST** reject application Packets signed by recovery keys and **MUST** accept recovery-signed `KEY_EVENT` only if the recovery key is declared in the DID Document and not revoked.
 
 - **Multiple devices:**
   - A single DID may have multiple authentication keys (one per device).
@@ -153,6 +157,7 @@ Recovery mechanisms (social recovery, encrypted backups) are left to client impl
 ### 5.4 Revocation & Validity Windows
 
 - Every verification method in a DID Document **MUST** carry `valid_from` and **SHOULD** carry `valid_until` to bound signature usability.
+- The genesis DID Document acts as the bootstrap of the key-event chain: each listed verification method is treated as an implicit `KEY_EVENT` with `event = "ADD"` effective at its `valid_from`. There is **no** validity before `valid_from`; documents omitting `valid_from` for a key are invalid.
 - Revocation/rotation events are represented as Packets with `content.type = "KEY_EVENT"`:
 
 ```jsonc
@@ -170,10 +175,11 @@ Recovery mechanisms (social recovery, encrypted backups) are left to client impl
 ```
 
 Rules:
-- `KEY_EVENT` Packets **MUST** be signed by an existing non‑revoked key (or a designated offline recovery key) and **MUST** be gossiped even if they revoke the signing key.
+- `KEY_EVENT` Packets **MUST** be signed by an existing non‑revoked key listed in the current DID Document (or by a designated recovery key from that document) and **MUST** be gossiped even if they revoke the signing key.
+- The first explicit `KEY_EVENT` after the genesis DID Document MUST chain to an existing verification method whose `valid_from` has already started; implementers MUST NOT assume any implicit earlier validity window.
 - Relays **MUST** index `KEY_EVENT` by `author_id` and serve the latest chain to verifiers; clients **MUST** fetch and apply key events before accepting new signatures.
-- A Packet signature is valid only if the relay‑observed receive time is within `[valid_from − clock_skew, min(valid_until, revoked_at) + clock_skew]` for the signing key. Back‑dated `timestamp` fields do **NOT** extend validity.
-- Revoked keys **MUST** be treated as unusable for new packets immediately after `revoked_at`; previously received packets remain valid only if they arrived before `revoked_at + clock_skew`.
+- A Packet signature is valid only if the relay‑observed receive time is within `[valid_from − clock_skew_seconds, min(valid_until, revoked_at) + clock_skew_seconds]` for the signing key (see RFC‑0000 §6.1 for bounds and defaults). Back‑dated `timestamp` fields do **NOT** extend validity.
+- Revoked keys **MUST** be treated as unusable for new packets immediately after `revoked_at`; previously received packets remain valid only if they arrived before `revoked_at + clock_skew_seconds`.
 
 ### 6. Multiple Personas
 

@@ -74,7 +74,7 @@ Fields:
 Minimal content object:
 ```jsonc
 {
-  "type": "POST",                 // POST | MESSAGE | TRUST_EDGE | ATTESTATION | CONFIG | ...
+  "type": "POST",                 // POST | MESSAGE | TRUST_EDGE | ATTESTATION | ATTESTATION_RETRACTION | CORRECTION | CONFIG | ...
   "text": "Consensus node deployed.",
   "media": [
     {
@@ -108,8 +108,10 @@ Content types are extensible. Clients **SHOULD** gracefully ignore unknown types
 
 Strata has no hard delete. To correct or retract information:
 - Authors **MUST** publish a new Packet with `content.type = "CORRECTION"` referencing `target_packet`.
-- `CORRECTION` payload may include replacement text/media and an optional `reason` string.
-- Attestors retracting a mistaken attestation **SHOULD** emit a `CORRECTION` Packet that supersedes the earlier attestation by ID.
+- Only the original author of `target_packet` (or the original attestor, if `target_packet` is an attestation packet) **MAY** issue a superseding correction; clients/relays **MUST** ignore supersession attempts from other authors.
+- `CORRECTION` payload **MUST** include `action: "replace" | "retract"` plus an optional `reason`; `replace` may carry replacement text/media, while `retract` signals that the original should be treated as withdrawn without substitute content.
+- Ordering: if multiple valid corrections exist from the original author/attestor, the latest by relay‑observed `received_at` **MUST** win (tie‑break by lexicographically smallest `packet_id`).
+- Attestors retracting a mistaken attestation **SHOULD** emit either a `CORRECTION` with `action: "retract"` or an `ATTESTATION_RETRACTION` Packet (see RFC‑0003); either form **MUST** zero the attestation’s weight in quorum calculations.
 - Clients **SHOULD** surface the correction link prominently and down‑rank or blur superseded Packets but MUST retain original history for auditability.
 
 ## 4. Canonicalization and Packet ID

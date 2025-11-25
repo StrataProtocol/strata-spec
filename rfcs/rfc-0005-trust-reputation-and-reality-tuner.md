@@ -66,6 +66,7 @@ where w_seed + w_wot + w_stake + w_egal = 1
   - Content‑addressed (`bootstrap_id = multihash(blake3-256(doc))`),
   - Signed by at least 3 distinct gatekeepers with different `diversity_tags` (e.g., region/org_type),
   - Versioned with `issued_at` and `expires_at` to avoid stale hijacks.
+- Diversity tags **MUST** be anchored to verifiable evidence (e.g., DNS TXT for a domain, legal entity ID + jurisdiction, or verifiable credential). Clients count diversity by unique anchors, not just tag strings; if all anchors resolve to the same actor, clients **MUST** fail closed on diversity.
 - Bootstrap Document contents **MUST** include:
   - `relays` list with relay DIDs and URLs,
   - `seed_gatekeepers` (StrataIDs used for `T_seed`),
@@ -108,6 +109,11 @@ where w_seed + w_wot + w_stake + w_egal = 1
   "signature": "0xStakerSig..."
 }
 ```
+Proof verification registry (minimum set):
+- `chain = "solana-mainnet", proof.type = "onchain-tx"`: `tx_id` MUST reference a confirmed transaction; `proof_blob` MUST encode a Merkle/account-state proof binding `beneficiary`, `amount`, `locked_until`, and `asset` fields. Clients **MUST** validate inclusion against the referenced `block_height`.
+- `chain = "ethereum-mainnet", proof.type = "onchain-tx"`: `proof_blob` MUST be an RLP/JSON receipt+Merkle proof to the canonical block header; same field bindings as above.
+- `chain = "offchain-escrow", proof.type = "escrow-receipt"`: `proof_blob` MUST be a signed receipt by the escrow provider covering `stake_id`, `staker`, `beneficiary`, `amount`, `locked_until`, and an escrow attestor key declared in bootstrap or client policy.
+Bootstrap documents MAY extend the registry with additional `chain` values and required proof codecs; clients **MUST** treat unknown chain/proof combinations as advisory only and weight them as zero.
 Possible formula:
 `T_stake(i) = f( Σ sqrt(amount_by_distinct_stakers) )`, where:
 - Multiple diverse stakers increase trust,
@@ -115,7 +121,7 @@ Possible formula:
 
 Rules:
 - `asset` MUST specify chain/context; unknown assets are ignored.
-- `proof` MUST be provided; without a verifiable proof the stake entry is advisory only and should be down‑weighted to zero.
+- `proof` MUST be provided; without a verifiable proof the stake entry is advisory only and should be down‑weighted to zero. Unknown `chain`/`proof.type` pairs follow the same rule.
 - Slashing is expressed via Packets with `content.type = "STAKE_SLASH"` referencing `stake_id` and carrying evidence; slashing events **MUST** be signed by an authorized slasher identity declared in the original stake or by community policy.
 - `locked_until` is enforced by verifying the underlying proof; clients **MUST** treat premature unlocks as slashable events.
 
@@ -146,8 +152,26 @@ Key techniques:
 - Reference parameters (implementations MAY tune):
   - `B_high` = 20 edges with `strength > 0.5` per 24h (rolling) per identity.
   - `B_low` = 100 edges with `strength <= 0.5` per 24h.
-  - Revocations (`TRUST_REVOCATION`) do not refund the budget immediately; credit is restored after the same window to prevent wash‑trading.
-- Relays **SHOULD** enforce budgets at ingest; clients **MUST** down‑weight edges beyond budget to zero.
+- Rolling-window accounting (using relay‑observed `received_at`, tie by packet_id):
+```text
+window = 24h
+bucket(edge) = strength > 0.5 ? HIGH : LOW
+
+on_issue(edge):
+  purge(events where received_at < now - window)
+  if count(issues in bucket) >= B_bucket:
+     reject or emit with weight=0
+  else:
+     record issue event in bucket
+
+on_revocation(edge):
+  purge(events where received_at < now - window)
+  record revocation event (does not delete issue events)
+  // budget only frees when the original issue event ages out of window
+```
+- Budgets for HIGH and LOW are independent; revoking a LOW edge does not affect HIGH capacity and vice versa.
+- Multiple revocations inside the window do not accelerate refunds; the original issue’s timestamp controls when budget is restored.
+- Relays **SHOULD** enforce budgets at ingest; clients **MUST** down‑weight edges beyond budget to zero to remain interoperable.
 
 ### 5.3 Cluster Detection
 - Identify dense subgraphs with high internal trust but low external edges.
