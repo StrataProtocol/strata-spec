@@ -9,6 +9,11 @@ Implementers of relays, clients, SDKs, and attestor services should treat this r
 
 ---
 
+## Current Spec Version
+
+- Baseline: `v0.0.1-spec`
+- Breaking changes after this point will be announced in CHANGELOG and via RFCs.
+
 ## Repository Structure
 
 ```text
