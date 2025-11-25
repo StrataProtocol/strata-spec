@@ -48,7 +48,7 @@ Shared vocabulary and rules:
 
 Identity model:
 - `did:strata` method (StrataIDs)
-- Key generation, storage, rotation, recovery (conceptual)
+- Key generation, storage, rotation, recovery (conceptual) including recovery-only keys and explicit validity windows
 - Multiple personas per human
 - Trust edges between identities (Web-of-Trust base layer)
 
@@ -59,6 +59,7 @@ Core data model:
 - Canonicalization and hashing rules
 - Provenance header (`origin_type`, `device_id`, `edit_history`)
 - Genesis Events for media
+- Corrections/retractions and ATTESTATION_RETRACTION semantics
 
 ##### `rfcs/rfc-0003-attestations-and-retroactive-consensus.md`
 
@@ -66,7 +67,7 @@ Attestation system:
 - Attestation objects (embedded + standalone)
 - Claim types (provenance analysis, fact-checking, spam/abuse)
 - Attestor types (`CLIENT`, `NGO`, `LAB`, `MEDIA`, `MODEL_PROVIDER`, `OTHER`)
-- Retroactive consensus (quorum over attestations, anti-viral downgrade behavior)
+- Retroactive consensus (quorum over attestations, anti-viral downgrade behavior), attestation retraction handling
 
 ##### `rfcs/rfc-0004-relay-transport-protocol.md`
 
@@ -74,12 +75,12 @@ Relay layer:
 - Minimal WebSocket protocol (SUBSCRIBE, PUBLISH, EVENT, OK, ERROR)
 - Relay responsibilities and non-responsibilities
 - Storage/indexing expectations
-- Local policy hooks (rate limiting, blocking, legal compliance)
+- Local policy hooks (rate limiting, blocking, legal compliance), bounded auth challenge validity
 
 ##### `rfcs/rfc-0005-trust-reputation-and-reality-tuner.md`
 Trust + filtering reference model:
 - Composite reputation (seed trust, Web-of-Trust, stake, behavior)
-- Sybil resistance (age-gating, trust budgets, cluster down-weighting)
+- Sybil resistance (age-gating, trust budgets with explicit refund rules, cluster down-weighting)
 - Quorum logic for claims over attestations
 - Reality Tuner modes (Strict / Standard / Wild)
 - Mapping signals → traffic-light rings (🟢/🟡/🔴)
