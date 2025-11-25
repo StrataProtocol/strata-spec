@@ -284,7 +284,25 @@ It is recommended that:
 - Rate limits MAY be scoped to authenticated identity (preferred) or IP address (fallback).
 - Clients **SHOULD** distinguish `rate_limited` from other failures and back off accordingly.
 
-## 7. Security Considerations
+## 7. Client-Side Relay QoS Reputation
+
+This is distinct from user/identity reputation; relays are untrusted utilities evaluated on performance/integrity.
+
+- Local scope: Each client keeps a local `relay_scores` table; there is no global consensus score.
+- Passive metrics:
+  - Latency (round-trip/ping),
+  - Throughput for media blobs,
+  - Uptime/connection success rate over a rolling 7‑day window.
+- Active integrity:
+  - Validity check: drop/penalize relays that forward malformed or tampered Packets (signature mismatch with content).
+  - Consistency check (anti-censorship/silent-drop): randomized probes for known packet hashes; penalize relays returning 404 for widely available content.
+- State machine (example):
+  - 🟢 Active: preferred for fetch/publish.
+  - 🟡 Backup: slow but functional; used when Active relays fail.
+  - 🔴 Blacklisted: repeated integrity failures/timeouts; stop connecting.
+- Churn: Clients SHOULD periodically sample new relays from bootstrap lists to avoid sticking to degraded sets.
+
+## 8. Security Considerations
 
 Traffic correlation:
 - Relays can observe who connects when and how often; metadata minimization or layered routing may be necessary for high‑risk users.
@@ -297,7 +315,7 @@ Abuse:
 - Replay:
   - Relays **MUST** drop duplicate `packet_id`s and honor `expires_at`/freshness from RFC‑0002 to prevent replay amplification.
 
-## 8. Backwards Compatibility
+## 9. Backwards Compatibility
 
 Future versions of this transport protocol may add:
 - New message types,

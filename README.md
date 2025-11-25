@@ -12,6 +12,7 @@ Implementers of relays, clients, SDKs, and attestor services should treat this r
 ## Current Spec Version
 
 - Baseline: `v0.0.1-spec`
+- Current tag: `v0.1.1-spec`
 - Breaking changes after this point will be announced in CHANGELOG and via RFCs.
 
 ## Repository Structure
@@ -80,7 +81,7 @@ Relay layer:
 - Minimal WebSocket protocol (SUBSCRIBE, PUBLISH, EVENT, OK, ERROR)
 - Relay responsibilities and non-responsibilities
 - Storage/indexing expectations
-- Local policy hooks (rate limiting, blocking, legal compliance), bounded auth challenge validity
+- Local policy hooks (rate limiting, blocking, legal compliance), bounded auth challenge validity, client-side relay QoS reputation and churn
 
 ##### `rfcs/rfc-0005-trust-reputation-and-reality-tuner.md`
 Trust + filtering reference model:

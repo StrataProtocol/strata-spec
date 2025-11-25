@@ -206,6 +206,7 @@ Relays are minimal, content‑agnostic servers:
 - Content is referenced via hashes (e.g. IPFS/Arweave).
 
 Relays may apply local policies (blocking some keys or hashes) but do not interpret decrypted content. Multiple relays can exist in parallel; users and clients choose which to connect to.
+Relay reputation is distinct from user/identity reputation: relays are untrusted utilities measured by performance, not identity. Clients maintain local, per-device “quality of service” scores based on latency, throughput, uptime, and integrity checks, preferring relays that deliver data quickly and honestly and demoting those that throttle or tamper.
 
 ### 5.4 Layer 3 – Applications & Reality Tuner (Clients)
 
@@ -391,6 +392,20 @@ Clients:
 - Fail over to others when one is unreachable or hostile,
 - Hide all of this behind the familiar concept of “being online.”
 
+### 8.2 Relay QoS Reputation (Client‑Side)
+
+- Local only: Each client keeps a local `relay_scores` table; there is no global consensus score.
+- Metrics:
+  - Passive: latency (ping), throughput for media blobs, uptime/connection success over a rolling 7‑day window.
+  - Active integrity:
+    - Validity check: disconnect if a relay forwards malformed/tampered packets (signature fails content).
+    - Consistency check: random background probes for known packet hashes; penalize relays returning 404/Not Found for widely available content (anti‑censorship).
+- State machine:
+  - 🟢 Active: preferred for fetch/publish.
+  - 🟡 Backup: slow but functional; used when Active relays fail.
+  - 🔴 Blacklisted: repeated integrity failures/timeouts; client stops connecting.
+- Churn: Periodically sample new relays from bootstrap lists to avoid stickiness to failing sets.
+
 ---
 
 ## 9. Applications, Reality Tuner & UX (Layer 3)
@@ -569,6 +584,8 @@ This mechanism is designed to curb viral deepfakes without becoming a centralize
   - Governments pressuring relays, client developers, and app stores.
 - **Abuse, Spam, and Harassment**
   - Malicious behavior by users exploiting openness.
+- **Malicious Relays**
+  - Silent dropping of specific DIDs or packet hashes, or tampering attempts.
 
 ### 12.2 Limitations
 
@@ -584,6 +601,7 @@ Strata **does**:
 - Provide a structural foundation where provenance is explicit,
 - Make it easier for users to choose their trust relationships,
 - Reduce the power of single platforms as arbiters of speech.
+- Mitigate hostile relays via multi‑path routing, client‑side consistency probes, and local relay QoS scoring that demotes/blacklists bad actors.
 
 ---
 
