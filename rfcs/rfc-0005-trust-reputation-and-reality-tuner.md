@@ -195,6 +195,11 @@ For each Packet `P`, Reality Tuner considers:
     - Provenance color (🟢/🟡/🔴),
     - Warnings (e.g., “Manipulated,” “Likely synthetic”).
 
+Clients SHOULD treat the Reality Tuner as the canonical decision function for feed inclusion and visibility:
+- The Reality Switch (Strict / Standard / Wild) is an input to the Tuner configuration, not a separate filtering layer.
+- Application code that assembles feeds SHOULD NOT implement independent “mode flags” that bypass the Tuner’s show / blur / hide decisions, except for purely UX‑driven constraints (e.g., different surfaces over the same underlying Tuner output).
+- When an application wants a stricter or looser feed profile, it SHOULD do so by changing Tuner parameters (e.g., thresholds, quorum weights) rather than bolting on additional opaque filters.
+
 ### 6.3 Reality Switch Modes
 
 #### Strict (Grandma Mode)
@@ -206,6 +211,7 @@ Recommended behavior:
 - For red‑ring content:
     - Hide or blur by default,
     - Require explicit user action to view.
+- When retroactive consensus quorum is reached for negative claims (e.g., `MANIPULATED`, `ORIGIN_LIKELY_SYNTH`, `SPAM`, `ABUSIVE` per RFC‑0003 §7), the Reality Tuner SHOULD hide or heavily blur the corresponding Packets by default in Strict mode, and require explicit user action to reveal them if they are shown at all.
     
 #### Standard (Default)
 Recommended behavior:
@@ -216,6 +222,7 @@ Recommended behavior:
         - 🟡 uncertain,
         - 🔴 synthetic/manipulated.
 - Use `R_total` and provenance to influence ranking, not strict visibility.
+- When negative quorum is reached, the Tuner SHOULD blur thumbnails and apply red‑ring + warning labels by default and down‑rank the content in feeds, rather than relying on a separate “flagged” mode bit outside the Tuner.
 
 #### Wild (Developer Mode)
 Recommended behavior:
@@ -238,6 +245,8 @@ Reference mapping from signals to ring color:
     - Mixed or conflicting attestations.
     
 Thresholds (`T_green_min`, etc.) are implementation‑specific.
+
+Clients SHOULD derive both ring color and visibility (show / blur / hide) from the Reality Tuner’s evaluation of provenance, `R_total`, and attestation quorum status, rather than from ad‑hoc per‑feature flags.
 
 ## 8. Security & Privacy Considerations
 

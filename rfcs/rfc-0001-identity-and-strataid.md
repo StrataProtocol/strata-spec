@@ -96,17 +96,27 @@ Strata does not mandate a specific DID Document registry; DID Documents can be:
 
 ### 3.3 DID Resolution & Distribution
 
-Clients **MUST** follow a deterministic resolution order to avoid split‑brain identity views:
+Clients **MUST** follow a deterministic resolution order to avoid split-brain identity views:
 
 1. Check locally cached DID Document referenced by its multihash (`did_doc_hash`) seen within a freshness window.
 2. Query bootstrap documents (whitepaper §10.1) and relay manifests for `did_doc_hash` pointers for the target DID.
-3. Fetch the content‑addressed DID Document by `did_doc_hash` from relays or other stores.
+3. Fetch the content-addressed DID Document by `did_doc_hash` from relays or other stores.
 
 Rules:
-- DID Documents **MUST** be content‑addressed; `did_doc_hash = multihash(blake3-256(canonical_did_doc))`.
+- DID Documents **MUST** be content-addressed; `did_doc_hash = multihash(blake3-256(canonical_did_doc))` encoded as **base58btc multibase**. Other encodings (hex) MUST be rejected.
 - Updates **MUST** be monotonic and linked via `prev_did_doc_hash` to allow replay/rollback protection.
 - If multiple heads exist for the same DID (conflict), clients **MUST** fail closed and surface the conflict instead of guessing.
-- Relay operators **SHOULD** gossip `did_doc_hash` updates alongside identity‑scoped packets to speed propagation.
+- Relay operators **SHOULD** gossip `did_doc_hash` updates alongside identity-scoped packets to speed propagation.
+
+#### 3.4 Reference Resolver (Non-Normative)
+
+A shared resolver library is RECOMMENDED so relays/clients do not embed bespoke key registries. The reference implementation is `strata-identity` (Layer 0), which:
+
+- Resolves `did:strata:...` → current Ed25519 verification key using a deterministic chain of sources (bootstrap docs, static maps, cached DID Documents),
+- Verifies `AUTH` and packet signatures using canonical JSON and BLAKE3-based `packet_id`,
+- Exposes both Go and JS/TS APIs so relays and clients can share identical resolution logic.
+
+Implementations MAY use alternative resolvers provided they honor the resolution order and validation rules in this RFC and RFC-0002.
 
 ### 4 Cryptographic Primitives
 
@@ -233,6 +243,17 @@ The Packet signature covers the trust edge content; a secondary `edge_signature`
 - Clients are free to interpret edges according to their own reputation algorithms (see RFC‑0005).
 
 Trust edges are append‑only; revocations or changes MUST be expressed as new packets, not silent edits.
+
+#### 7.2.1 Inclusion in Trust Graphs
+
+Clients and relays **MUST NOT** include a `TRUST_EDGE` Packet in any trust/reputation computation unless:
+- The Packet passes full signature verification per RFC‑0002, and
+- `author_id` equals `content.from`, and
+- The signing key is currently valid for `author_id` according to RFC‑0001 key‑event rules.
+
+Packets that fail these checks **MUST** be ignored for trust and reputation calculations and **MUST NOT** silently degrade to weaker semantics.
+
+Relays that maintain server‑side indices of trust edges **SHOULD** perform the same checks at ingest time and either reject invalid trust‑edge Packets or store them only in a quarantine bucket that is never surfaced via “trusted edge” APIs.
 
 #### 7.3 Revocation & Updates
 

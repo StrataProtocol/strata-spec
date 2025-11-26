@@ -3,7 +3,9 @@
 - Status: Draft
 - Author: Sean Red
 - Created: 2025-11-25
-- Updated: 2025-11-25
+- Updated: 2025-11-26
+
+> **BREAKING CHANGE (2025-11-26):** Wire encoding for content-addressed identifiers (`packet_id`, `genesis_id`, `stake_id`, `bootstrap_id`) changed from multibase (base58btc) to `0x` + lowercase hex. Multibase `z` prefix is now reserved exclusively for DIDs and DID-related fields. See 5.2 and 5.4.
 
 
 ## 1. Summary
@@ -178,19 +180,34 @@ For hashing and signing operations (e.g., `computing packet_id`) :
 ## 5. Hashing & Identifiers
 ### 5.1 Hash Functions
 
-For `packet_id`, `genesis_id`, and other content‑addressed identifiers, implementations **MUST** use `BLAKE3-256` and include the multihash prefix to make the hash algorithm self‑describing. SHA‑256 MAY be accepted when explicitly indicated via multihash for legacy ingestion, but it MUST NOT be emitted by conformant implementations.
+For `packet_id`, `genesis_id`, and other content‑addressed identifiers, implementations **MUST** use `BLAKE3-256`. SHA‑256 MAY be accepted for legacy ingestion when explicitly indicated, but it MUST NOT be emitted by conformant implementations.
 
 ### 5.2 `packet_id`
 `packet_id` is a string representing a hash of the canonical Packet body (excluding `packet_id` and `signature`).
 
 Encoding:
-- Wire format **MUST** be multibase of multihash (e.g., base58btc‑encoded BLAKE3‑256 multihash).
-- Hex strings (`0x...`) are **display‑only** and **MUST NOT** be used for wire interoperability; implementations that accept them **MUST** canonicalize to multibase/multihash when re‑emitting.
+- Wire format for v0 **MUST** be `0x` followed by the lowercase hex encoding of the raw digest bytes (BLAKE3-256).
+- Implementations **MUST NOT** emit base58btc (multibase `z`) for `packet_id` on the wire.
+- Example: `"0xaf1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262"` (32-byte BLAKE3-256 digest, hex encoded with `0x` prefix).
 
-### 5.3 `genesis_id`, `bootstrap_id`, etc.
-Other identifiers (e.g., `genesis_id`, `bootstrap_id`, `stake_id`) follow the same principle:
+### 5.3 `genesis_id`, `bootstrap_id`, `stake_id`
+Other content-addressed identifiers (e.g., `genesis_id`, `bootstrap_id`, `stake_id`) follow the same principle:
 - Derived from a canonical hash of the underlying object,
-- Encoded as hex or multibase.
+- Wire format **MUST** be `0x` + lowercase hex of the digest bytes,
+- Implementations **MUST NOT** emit base58btc for these identifiers.
+
+### 5.4 Encoding Distinction: DIDs vs Content IDs
+
+Strata uses two distinct encoding schemes:
+
+| Identifier Type | Wire Encoding | Example |
+|-----------------|---------------|---------|
+| DIDs and DID-related fields (`author_id`, `attestor_id`, `device_id`, etc.) | Multibase `z` (base58btc) per DID spec | `did:strata:z6MkfQ...` |
+| Content-addressed IDs (`packet_id`, `genesis_id`, `stake_id`, `bootstrap_id`) | `0x` + lowercase hex | `0x1e20a1b2c3d4...` |
+
+Rationale:
+- DIDs follow W3C DID Core conventions which use multibase for method-specific identifiers.
+- Content-addressed IDs use hex for debuggability, tooling compatibility, and alignment with Ethereum/IPFS ecosystem conventions.
 
 ## 6. Time & Timestamps
 

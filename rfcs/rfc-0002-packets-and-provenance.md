@@ -2,10 +2,12 @@
 
 # RFC-0002: Data Packets and Provenance Headers
 
-- **Status:** Draft  
-- **Author(s):** Strata Core Team  
-- **Created:** 2025-11-25  
-- **Updated:** 2025-11-25  
+- **Status:** Draft
+- **Author(s):** Strata Core Team
+- **Created:** 2025-11-25
+- **Updated:** 2025-11-26
+
+> **BREAKING CHANGE (2025-11-26):** `packet_id` and `genesis_id` wire encoding changed from multibase (base58btc) to `0x` + lowercase hex. See RFC-0000 5.2-5.4.  
 
 ---
 
@@ -40,7 +42,7 @@ A Packet is a JSON object with the following top‑level fields:
 
 ```jsonc
 {
-  "packet_id": "zb7...a1",
+  "packet_id": "0x1e208f2c3a4b5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7a1",
   "version": 1,
   "timestamp": 1715421200,
   "author_id": "did:strata:zero_cool",
@@ -64,7 +66,7 @@ Fields:
 - `author_id` – StrataID (DID) of the author.
 - `content` – content payload (see below).
 - `provenance_header` – provenance information (optional for non‑media content).
-- `attestations` – embedded attestations (see RFC‑0003) (optional).
+- `attestations` – embedded attestations (see RFC‑0003) (optional). The optional top-level `attestations` array is reserved for Attestation objects as defined in RFC‑0003. Clients SHOULD treat these as “embedded attestations” and handle them identically to standalone attestation Packets once validated.
 - `consensus_metrics` – optional aggregate counters.
 - `signature` – author’s signature over the Packet.
 ```
@@ -128,9 +130,10 @@ A canonical JSON representation (e.g. JSON Canonicalization Scheme) **SHOULD** b
 ### 4.2 Packet ID & Signature
 - `packet_id` is computed as:
   ```
-  packet_id = multibase(multihash(blake3-256(
-      canonicalized_packet_without_packet_id_and_signature)))
+  packet_id = "0x" + hex(blake3-256(
+      canonicalized_packet_without_packet_id_and_signature))
   ```
+  where `hex()` produces lowercase hexadecimal encoding.
 - `signature` is computed as:
   ```
   signature = sign(canonicalized_packet_without_packet_id_and_signature, author_private_key)
@@ -204,7 +207,7 @@ Rules:
 A Genesis Event is a standalone object that records the initial origin of specific media.
 ```jsonc
 {
-  "genesis_id": "0xgenesis123",
+  "genesis_id": "0x1e20b1c2d3e4f5061728394a5b6c7d8e9f0a1b2c3d4e5f6071829304a5b6c7d8e9",
   "media_hash": "ipfs://QmGenesisHash...",
   "origin_type": "HARDWARE_SECURE_ENCLAVE",
   "details": {
@@ -283,7 +286,7 @@ Aggregated counters **MUST** be published as standalone Packets with `content.ty
 {
   "content": {
     "type": "CONSENSUS_METRIC",
-    "target_packet": "zb7...a1",
+    "target_packet": "0x1e208f2c3a4b5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7a1",
     "metrics": {
       "human_votes": 450,
       "synth_votes": 12,

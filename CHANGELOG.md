@@ -8,6 +8,9 @@ All notable changes to this project will be documented in this file.
 - Expanded threat model to cover malicious relays and the mitigations (multi-path routing, consistency probes, QoS scoring).
 - README now points to current tag and relay QoS reputation coverage.
 
+### Breaking
+- Relay authentication now requires an explicit `AUTH_OK` acknowledgment per RFC-0004; legacy “silent success” or generic `OK` echoes are no longer considered valid auth success.
+
 ## [v0.1.0-spec] - 2025-11-25
 ### Added
 - Introduced bounded `clock_skew_seconds` with bootstrap overrides.
@@ -19,4 +22,3 @@ All notable changes to this project will be documented in this file.
 ## [v0.0.1-spec] - 2025-11-25
 ### Added
 - Initial draft of whitepaper and RFCs (0000–0005).
-

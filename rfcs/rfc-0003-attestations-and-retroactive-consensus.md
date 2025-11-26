@@ -2,10 +2,12 @@
 
 # RFC-0003: Attestations and Retroactive Consensus
 
-- **Status:** Draft  
-- **Author(s):** Strata Core Team  
-- **Created:** 2025-11-25  
-- **Updated:** 2025-11-25  
+- **Status:** Draft
+- **Author(s):** Strata Core Team
+- **Created:** 2025-11-25
+- **Updated:** 2025-11-26
+
+> **Note:** `packet_id` and content-addressed IDs use `0x` + lowercase hex encoding. See RFC-0000 5.2-5.4.  
 
 ## 1. Summary
 
@@ -36,7 +38,7 @@ Retroactive consensus leverages attestations to downgrade or blur widely‑share
 
 ### 3.1 Embedded Attestation in Packet
 
-Packets MAY include embedded attestations in the `attestations` array:
+Packets MAY include embedded attestations in the top-level `attestations` array (see RFC-0002 §3.1):
 
 ```jsonc
 "attestations": [
@@ -71,14 +73,14 @@ Attestations MAY also be sent as standalone Packets (`content.type = "ATTESTATIO
 
 ```jsonc
 {
-  "packet_id": "zb7...attpkt2",
+  "packet_id": "0x1e20c4d5e6f7081920a1b2c3d4e5f6078192a3b4c5d6e7f8091a2b3c4d5e6f7082",
   "version": 1,
   "timestamp": 1715422200,
   "author_id": "did:ngo:forensic_lab",
 
     "content": {
       "type": "ATTESTATION",
-      "target_packet": "zb7...a1",
+      "target_packet": "0x1e208f2c3a4b5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7a1",
     "attestation": {
       "attestation_id": "0xatt2",
       "attestor_id": "did:ngo:forensic_lab",
@@ -101,6 +103,16 @@ Attestations MAY also be sent as standalone Packets (`content.type = "ATTESTATIO
 Clients SHOULD:
 - Index standalone attestations by `target_packet`,
 - Merge embedded and external attestations for decision making.
+- Before an attestation contributes to any Reality Tuner, quorum, or reputation logic, clients **MUST**:
+  - Validate the containing Packet per RFC-0002 (packet signature, `author_id`, and time windows).
+  - Verify the attestation’s own signature using the public key for `attestor_id` (resolved via RFC-0001). If signature verification fails, the attestation **MUST** be ignored.
+  - For standalone attestation Packets (`content.type = "ATTESTATION"`):
+    - `content.attestation.attestor_id` **MUST** equal the Packet `author_id`. If they differ, the attestation **MUST** be treated as invalid and ignored.
+    - `content.attestation.target_packet` **MUST** reference the packet_id being attested; mismatches or malformed references **MUST** cause the attestation to be ignored.
+  - For embedded attestations in `packet.attestations`:
+    - `attestor_id` MAY be different from `author_id`, but the signature **MUST** verify against `attestor_id`.
+  - Clients **MUST** treat embedded and standalone attestations that pass validation as equivalent inputs and **MUST** merge them by `(target_packet, attestation_id)` when computing quorums. Duplicate attestations (same `attestation_id` from the same attestor) **MUST NOT** be double-counted.
+  - Attestations that fail any of the checks above (invalid signature, inconsistent `attestor_id`, mismatched `target_packet`) **MUST** be ignored for scoring and quorum purposes, but MAY be surfaced in advanced debugging views as “invalid.”
 
 ### 3.3 Attestation Retraction Packet
 
@@ -110,7 +122,7 @@ An attestor may retract one of its own attestations using `content.type = "ATTES
 {
   "content": {
     "type": "ATTESTATION_RETRACTION",
-    "target_packet": "zb7...a1",
+    "target_packet": "0x1e208f2c3a4b5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7a1",
     "attestation_id": "0xatt2",
     "reason": "erroneous model output"
   },
@@ -173,6 +185,8 @@ For example, a user may:
 - Ignore all `CLIENT` attestations.
 
 Attestor reputation can itself be computed using the same trust and stake mechanisms as any other identity.
+
+Before applying any attestor policies or computing quorum weights, clients **MUST** drop attestations that fail the validation rules in §3.2 (signature and identity consistency checks). Only attestations that pass these checks are eligible to contribute to `R_total` or retroactive consensus.
 
 ## 7. Retroactive Consensus
 
@@ -250,3 +264,4 @@ Reference client **SHOULD**:
 - Cache attestations per `target_packet`,
 - Allow user to inspect all attestations for a given Packet,
 - Expose settings to choose which attestors to trust.
+The `attestations` array referenced in this section is the top-level `packet.attestations` field defined in RFC-0002 §3.1, not `content.attestations` or any other nested location. Implementations MUST NOT rely on attestations stored under `content` or other ad-hoc fields; such data is application-specific and out of scope for the attestation model.

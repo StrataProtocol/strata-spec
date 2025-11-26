@@ -1,10 +1,12 @@
 
 # RFC-0004: Relay Transport Protocol
 
-- **Status:** Draft  
-- **Author(s):** Strata Core Team  
-- **Created:** 2025-11-25  
-- **Updated:** 2025-11-25  
+- **Status:** Draft
+- **Author(s):** Strata Core Team
+- **Created:** 2025-11-25
+- **Updated:** 2025-11-26
+
+> **Note:** `packet_id` uses `0x` + lowercase hex encoding. See RFC-0000 5.2-5.4.  
 
 ---
 
@@ -169,7 +171,7 @@ Relay behavior:
 - **MUST** stop sending `EVENT`s for the given `subscription_id`.
 - **SHOULD** free any server‑side resources associated with the subscription.
 
-### 3.7 AUTH / AUTH_CHALLENGE
+### 3.7 AUTH / AUTH_CHALLENGE / AUTH_OK
 
 Relay → Client (optional but RECOMMENDED):
 
@@ -190,6 +192,18 @@ Client → Relay:
   "author_id": "did:strata:alice",
   "challenge": "base64random...",
   "signature": "0xSigOver(challenge || server_id)",
+  "capabilities": ["publish", "subscribe"],
+  "client_msg_id": "optional-id"
+}
+```
+
+Relay → Client (on success):
+
+```json
+{
+  "type": "AUTH_OK",
+  "client_msg_id": "optional-id",
+  "author_id": "did:strata:alice",
   "capabilities": ["publish", "subscribe"]
 }
 ```
@@ -197,9 +211,25 @@ Client → Relay:
 Rules:
 - Relays **SHOULD** issue `AUTH_CHALLENGE` on connect; clients that cannot authenticate remain anonymous.
 - `AUTH` **MUST** be signed with an active key for `author_id`.
-- Relays **MAY** require successful `AUTH` before accepting `PUBLISH` or counting per‑identity rate limits; otherwise respond with `ERROR code: unauthenticated`.
+- After receiving an `AUTH` message, the relay **MUST** respond promptly with either:
+  - `AUTH_OK` if authentication and capability checks succeed, or
+  - `ERROR` with `code` set to `unauthenticated`, `invalid_signature`, or a more specific auth‑related error if the request is rejected.
+- If the relay enforces a capability model, the effective capability set for the session **MUST** be returned in `AUTH_OK.capabilities`. Clients **SHOULD** treat this array as authoritative for what they may attempt on that connection.
 - Clients **SHOULD** reuse the authenticated WebSocket for all actions instead of re‑authenticating per message.
 - Challenge validity: `expires_at` **MUST** allow at least 60 seconds of validity; recommended default is 120 seconds and **SHOULD NOT** exceed 10 minutes. Relays **MUST** reject shorter windows, and clients **SHOULD** retry with a fresh challenge if one expires mid‑handshake (use small randomized backoff to avoid thundering herds).
+
+Client behavior:
+- Start a short timeout after sending `AUTH` (e.g., a few seconds).
+- Transition the connection to `authenticated` only upon receiving `AUTH_OK`.
+- Treat `ERROR code: unauthenticated` or `ERROR code: invalid_signature` in response to `AUTH` as an authentication failure and return to `unauthenticated`.
+- On timeout with no `AUTH_OK` or `ERROR`, drop back to `unauthenticated` and **MAY** retry a fresh `AUTH` or a new connection.
+
+Correlation IDs:
+- Clients **MAY** include a `client_msg_id` field in any request‑like message that expects a direct reply, including `PUBLISH` and `AUTH`.
+- Relays **SHOULD** echo `client_msg_id` in `OK`, `ERROR`, and `AUTH_OK` responses so clients can correlate replies with requests.
+- Relays **MUST** tolerate clients that omit `client_msg_id`.
+
+Clients **MUST NOT** assume success based solely on the absence of an `ERROR`; they **SHOULD** wait for `AUTH_OK` or an explicit `ERROR` until their auth timeout elapses.
 
 ## 4. Storage & Indexing
 

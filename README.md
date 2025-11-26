@@ -28,6 +28,7 @@ strata-spec/
     rfc-0003-attestations-and-retroactive-consensus.md
     rfc-0004-relay-transport-protocol.md
     rfc-0005-trust-reputation-and-reality-tuner.md
+  strata-identity/ (reference resolver implementation, Layer 0)
 ```
 ### Top-Level
 #### whitepaper.md
