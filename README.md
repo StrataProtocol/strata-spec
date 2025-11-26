@@ -21,6 +21,9 @@ Implementers of relays, clients, SDKs, and attestor services should treat this r
 strata-spec/
   README.md
   whitepaper.md
+  docs/
+    what-is-strata.md
+    how-strata-helps-protect.md
   rfcs/
     rfc-0000-terminology-and-conventions.md
     rfc-0001-identity-and-strataid.md
