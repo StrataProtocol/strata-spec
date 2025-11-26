@@ -4,6 +4,7 @@
 - Author: Sean Red
 - Created: 2025-11-25
 - Updated: 2025-11-26
+- **Scope:** Normative conventions (terminology, canonicalization, identifiers)
 
 > **BREAKING CHANGE (2025-11-26):** Wire encoding for content-addressed identifiers (`packet_id`, `genesis_id`, `stake_id`, `bootstrap_id`) changed from multibase (base58btc) to `0x` + lowercase hex. Multibase `z` prefix is now reserved exclusively for DIDs and DID-related fields. See 5.2 and 5.4.
 
@@ -88,16 +89,16 @@ A Client is a user‑facing application that:
 - Holds and uses keys for one or more StrataIDs,
 - Connects to one or more Relays,
 - Displays a feed or other UI around Packets,
-- Runs the Reality Tuner (local filtering and labeling logic).
+- Runs the Trust Engine / Reality Tuner (local filtering and labeling logic).
 
 Examples:
 - Reference Strata PWA,
 - Third‑party social app integrating Strata,
 - Research tooling for provenance inspection.
 
-### 3.5 Reality Tuner & Reality Switch
+### 3.5 Trust Engine (Reality Tuner) & Reality Switch
 
-The Reality Tuner is the client‑side policy engine that combines:
+The **Trust Engine** (formerly nicknamed the Reality Tuner) is the client‑side view filter—not a truth oracle—that combines:
 - Packet content,
 - Provenance,
 - Attestations,
@@ -109,7 +110,7 @@ The Reality Switch is a high‑level UX control for selecting coarse policy prof
 - Strict (Grandma),
 - Standard (Default),
 - Wild (Developer).
-Attestations are defined in RFC‑0003; Reality Tuner and Switch behavior is specified in RFC‑0005 (with future tuning RFCs extending thresholds).
+Attestations are defined in RFC‑0003; Trust Engine and Reality Switch behavior is specified in RFC‑0005 (with future tuning RFCs extending thresholds).
 
 ### 3.6 Genesis Event
 A Genesis Event is a record that describes how a media artifact first entered Strata.
@@ -287,5 +288,5 @@ Values (initial):
 - [RFC 2119] – Key words for use in RFCs to Indicate Requirement Levels.
 - [RFC 0001-tbd] – Identity and StrataID.
 - [RFC 0002-tbd] – Data Packets and Provenance.
-- [RFC 0003-tbd] – Attestations and Reality Tuner.
+- [RFC 0003-tbd] – Attestations and Retroactive Consensus.
 - [RFC 0004-tbd] – Relays, Bootstrap, and Discovery.

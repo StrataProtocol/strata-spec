@@ -6,6 +6,7 @@
 - **Author(s):** Strata Core Team  
 - **Created:** 2025-11-25  
 - **Updated:** 2025-11-25  
+- **Scope:** Normative protocol (identity, DIDs, trust edges)
 
 ---
 

@@ -28,8 +28,19 @@ strata-spec/
     rfc-0003-attestations-and-retroactive-consensus.md
     rfc-0004-relay-transport-protocol.md
     rfc-0005-trust-reputation-and-reality-tuner.md
+    rfc-0100-strata-over-nostr.md         (planned binding)
+    rfc-0101-strata-over-activitypub.md   (planned binding)
   strata-identity/ (reference resolver implementation, Layer 0)
 ```
+
+### Specification Roles
+
+| Category | Docs |
+| --- | --- |
+| Protocol (MUST) | RFC‑0000–0004 (normative: terminology, identity, packets/provenance, attestations, relay transport) |
+| Reference (SHOULD) | RFC‑0005 (non‑normative Trust Engine / Reality Switch reference), future reputation profile RFCs |
+| Out‑of‑Scope / Context | whitepaper.md §12–13 (threat model, governance/economics), separate governance notes |
+
 ### Top-Level
 #### whitepaper.md
 Complete narrative + technical overview:
@@ -91,6 +102,10 @@ Trust + filtering reference model:
 - Quorum logic for claims over attestations
 - Reality Tuner modes (Strict / Standard / Wild)
 - Mapping signals → traffic-light rings (🟢/🟡/🔴)
+
+##### Planned transport bindings
+- `rfcs/rfc-0100-strata-over-nostr.md` — binding for carrying Strata Packets over Nostr (NIP-style extension).
+- `rfcs/rfc-0101-strata-over-activitypub.md` — binding for ActivityPub object/extension mapping.
 
 ## Who Should Read What?
 

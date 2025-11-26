@@ -6,6 +6,7 @@
 - **Author(s):** Strata Core Team
 - **Created:** 2025-11-25
 - **Updated:** 2025-11-26
+- **Scope:** Normative protocol (attestations, retroactive consensus wire semantics)
 
 > **Note:** `packet_id` and content-addressed IDs use `0x` + lowercase hex encoding. See RFC-0000 5.2-5.4.  
 
@@ -103,7 +104,7 @@ Attestations MAY also be sent as standalone Packets (`content.type = "ATTESTATIO
 Clients SHOULD:
 - Index standalone attestations by `target_packet`,
 - Merge embedded and external attestations for decision making.
-- Before an attestation contributes to any Reality Tuner, quorum, or reputation logic, clients **MUST**:
+- Before an attestation contributes to any Trust Engine / Reality Tuner, quorum, or reputation logic, clients **MUST**:
   - Validate the containing Packet per RFC-0002 (packet signature, `author_id`, and time windows).
   - Verify the attestation’s own signature using the public key for `attestor_id` (resolved via RFC-0001). If signature verification fails, the attestation **MUST** be ignored.
   - For standalone attestation Packets (`content.type = "ATTESTATION"`):
@@ -132,8 +133,15 @@ An attestor may retract one of its own attestations using `content.type = "ATTES
 
 Rules:
 - Only the original attestor (matching the attested packet’s `attestor_id` / `author_id`) **MAY** issue a retraction; others are informational only and MUST NOT affect quorum weight.
-- A retraction zeros the referenced attestation’s weight in quorum/reputation calculations while preserving auditability of the original claim.
+- A retraction **MUST** zero the referenced attestation’s weight in quorum/reputation calculations while preserving auditability of the original claim.
 - If multiple retractions exist from the attestor, the latest by relay‑observed `received_at` wins (tie‑break by lexicographically smallest `packet_id`).
+
+### 3.4 Append-Only Attestation History
+
+Attestations, corrections, and retractions are append‑only:
+- Existing attestation objects are **never** edited in place.
+- Corrections and `ATTESTATION_RETRACTION` Packets are expressed as new Packets referencing the original attestation.
+- Clients **MUST** keep the historical record while applying the latest valid retraction/correction from the original attestor to compute effective weight.
 
 ## 4. Claim Types
 
@@ -207,21 +215,19 @@ We want clients to be able to retroactively downgrade such content without:
 Let:
 
 - `P` = target packet,
-- `A_support` = set of attestations about `P` supporting a particular claim `C` (e.g., `MANIPULATED`),
-  - `R_total(i)` = reputation score of attestor `i` (see RFC‑0005).
-- `A_support` **MUST** exclude attestations that have been retracted (via `ATTESTATION_RETRACTION` or `CORRECTION action: "retract"`).
+- `A_support(C)` = set of attestations about `P` whose `subject = C` (e.g., `MANIPULATED`) that have **not** been retracted (via `ATTESTATION_RETRACTION` or `CORRECTION action: "retract"`),
+- `R_total(i)` = reputation score of attestor `i` (see RFC‑0005).
 
-A client defines a **quorum** for claim `C` when:
+`P` reaches quorum **for claim `C`** when all are true:
 
-1. There are at least `N_min` distinct attestors in `A_support`,
-2. The sum of their reputation scores exceeds `W_min`:
-    - `Σ_{i in A_support} R_total(i) ≥ W_min`,
-3. Attestors belong to at least `C_min` distinct trust clusters (not all from the same tight community),
-4. The oldest supporting attestation is at least `T_min` seconds old (to resist flash‑mobs).
+1. `|A_support(C)| ≥ N_min(C)` (distinct attestors),
+2. `Σ_{a in A_support(C)} R_total(attestor(a)) ≥ W_min(C)` (weighted support),
+3. Attestors in `A_support(C)` span at least `C_min(C)` distinct trust clusters (not all from one tight community),
+4. The oldest attestation in `A_support(C)` (by relay‑observed `received_at`) is at least `T_min(C)` seconds old (to resist flash‑mobs).
 
-Values (`N_min`, `W_min`, `C_min`, `T_min`) are client‑configurable and may differ:
-- Per claim type,
-- Per Reality Switch mode (Strict vs Standard vs Wild).
+Thresholds (`N_min`, `W_min`, `C_min`, `T_min`) are configured **per claim type** and **per Reality Switch mode** (Strict / Standard / Wild). Defaults live in RFC‑0005 as reference profiles, not protocol requirements.
+
+Conflicting quorums are possible (e.g., `MANIPULATED` and `UNALTERED_HARDWARE_CAPTURE` each hitting their own thresholds under different attestor sets). Reference handling is described in §7.4.
 
 ### 7.3 Client Behavior on Quorum
 
@@ -238,7 +244,14 @@ When quorum is reached for a claim like `MANIPULATED` or `ORIGIN_LIKELY_SYNTH`:
 - **Wild mode**: 
     - Show content but label with warnings and provenance details.
 
-Clients **MUST NOT** be required by the protocol to delete or permanently block P. Retroactive consensus is advisory to the Reality Tuner.
+Clients **MUST NOT** be required by the protocol to delete or permanently block P. Retroactive consensus is advisory to the Trust Engine / Reality Tuner.
+
+### 7.4 Reference Conflict Presentation (Non-normative)
+
+Reference clients SHOULD:
+- Display all non‑retracted attestations from attestors the user trusts on a given Packet.
+- When multiple trusted attestations about the same subject disagree (e.g., `MANIPULATED` vs `UNALTERED_HARDWARE_CAPTURE`), mark the Packet as **contested** and surface the disagreement (e.g., “3 labs say manipulated, 1 lab says unaltered”).
+- In Strict/Standard modes, prefer the more cautious label when conflicting claims each meet quorum (e.g., treat `MANIPULATED` as dominant over `UNALTERED`), while still exposing the full attestation set to the user.
 
 ### 8. Security & Abuse Considerations
 

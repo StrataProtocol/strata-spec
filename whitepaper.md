@@ -16,7 +16,7 @@ Strata shifts from **platform moderation** to **user sovereignty**:
 
 - Every unit of information is a **Data Packet**: content + cryptographic provenance + attestations + audit trail.
 - Servers act as **dumb relays**, forwarding opaque, encrypted packets.
-- Each user runs a **Reality Tuner** on their own device that decides what to show, blur, or ignore.
+- Each user runs a **Trust Engine** (formerly “Reality Tuner”) on their own device that decides what to show, blur, or ignore.
 
 Identity is cryptographic (keypairs and DIDs), not administrative (database rows and KYC). Provenance is explicit: where possible, hardware‑signed capture and model‑stamped generation; otherwise, clearly marked as unknown. Moderation is local: the network does not delete, it only labels; users and clients choose which labels to believe.
 
@@ -116,7 +116,7 @@ These axioms are the philosophical core of Strata.
 ### 4.3 Client‑Side Sovereignty (The Legal Shield)
 
 - Relays provide raw, encrypted packet streams.
-- The **Reality Tuner** on the user’s device decides:
+- The **Trust Engine** (client-side filter, not an oracle) on the user’s device decides:
   - Which packets to accept into the feed,
   - How to label or blur them.
 - Because filtering is done on‑device, relays behave like utilities, not publishers.
@@ -166,7 +166,7 @@ Strata is a four‑layer architecture:
    - Genesis events and provenance headers for media.
 3. **Layer 2: Transport Mesh**
    - Relays and content‑addressed storage.
-4. **Layer 3: Applications & Reality Tuner**
+4. **Layer 3: Applications & Trust Engine (Reality Switch)**
    - Clients, UX, Reality Switch, filters.
 
 ### 5.1 Layer 0 – Identity & Trust (Nodes)
@@ -195,6 +195,16 @@ For media content, Strata records:
   - Marks origin_type.
 
 Hardware‑signed and model‑stamped content can later be validated against issuer keys; unknown content is clearly marked.
+Packets that reference media **MUST** include a provenance header. When origin is unknown, the minimal valid header is:
+
+```jsonc
+{
+  "origin_type": "UNKNOWN",
+  "genesis_media_hash": null,
+  "edit_history": []
+}
+```
+Clients treat `UNKNOWN` as “no strong provenance evidence,” not an error.
 
 ### 5.3 Layer 2 – Transport Mesh (Relays)
 
@@ -208,13 +218,13 @@ Relays are minimal, content‑agnostic servers:
 Relays may apply local policies (blocking some keys or hashes) but do not interpret decrypted content. Multiple relays can exist in parallel; users and clients choose which to connect to.
 Relay reputation is distinct from user/identity reputation: relays are untrusted utilities measured by performance, not identity. Clients maintain local, per-device “quality of service” scores based on latency, throughput, uptime, and integrity checks, preferring relays that deliver data quickly and honestly and demoting those that throttle or tamper.
 
-### 5.4 Layer 3 – Applications & Reality Tuner (Clients)
+### 5.4 Layer 3 – Applications & Trust Engine (Clients)
 
 Clients implement:
 
 - UX (feed, profiles, composition),
 - Key generation and identity handling,
-- Reality Tuner policies.
+- Trust Engine / Reality Switch policies.
 
 **Official Strata Apps** are:
 
@@ -225,6 +235,20 @@ Clients implement:
   - 3‑position Reality Switch.
 
 Any third‑party app can implement the Strata protocol; “official” apps simply follow certain design and governance principles.
+
+### 5.5 Transport Bindings & Rollout Path
+
+Strata’s core is **Layers 0–1** (identity, trust, provenance, attestations). Layer 2 has a native reference protocol (RFC‑0004), but the same Packets and provenance headers can be carried over existing transports:
+- **Nostr events** via a NIP‑style binding (RFC‑0100, planned),
+- **ActivityPub objects** via extensions (RFC‑0101, planned),
+- Other transports as needed.
+
+Adoption strategy:
+1. **Phase 1:** Ship Strata Packets + provenance headers as Nostr/ActivityPub extensions (no new relay required).
+2. **Phase 2:** Ship a reference client that speaks both Strata Relay and Nostr/ActivityPub.
+3. **Phase 3:** Let native Strata relays compete on UX/features while bindings remain supported.
+
+This keeps the four‑layer architecture intact while avoiding a hard requirement to adopt native relays on day one.
 
 ---
 
@@ -408,7 +432,7 @@ Clients:
 
 ---
 
-## 9. Applications, Reality Tuner & UX (Layer 3)
+## 9. Applications, Trust Engine (Reality Tuner) & UX (Layer 3)
 
 ### 9.1 TikTok‑Style Onboarding (“Invisible Crypto”)
 
@@ -456,9 +480,9 @@ The **Reality Switch** is the primary high‑level control:
 
 Clients may allow advanced users to define custom profiles and policies beyond these three presets.
 
-### 9.3 Reality Tuner
+### 9.3 Trust Engine (Reality Tuner)
 
-Under the hood, the Reality Tuner:
+Under the hood, the Trust Engine (nicknamed the Reality Tuner in early drafts) is a client-side filter, not an oracle deciding truth. It:
 
 - Consumes:
   - Packets,
@@ -557,10 +581,26 @@ Rather than global deletion, Strata enables:
 2. **Quorum logic** on the client side:
    - If enough high‑reputation attestors a user trusts agree,
    - The client treats the content as falsified.
-3. The Reality Tuner:
+3. The Trust Engine (Reality Switch presets on top):
    - Blurs the thumbnail by default,
    - Adds warnings and red‑ring labels,
    - Optionally hides it in Strict mode.
+
+Quorum is evaluated **per claim type**. For a claim `C` (e.g., `MANIPULATED`), clients look at non‑retracted attestations on the target Packet and consider quorum reached when:
+- At least `N_min(C)` distinct attestors support `C`,
+- The sum of their reputation scores exceeds `W_min(C)`,
+- Support spans at least `C_min(C)` distinct trust clusters,
+- The oldest supporting attestation is at least `T_min(C)` seconds old (relay‑observed `received_at`).
+
+`N_min / W_min / C_min / T_min` are set per claim type and per Reality Switch mode. Defaults live in the reference model (RFC‑0005); protocol only requires the structure, not specific values.
+
+Attestation history is append‑only:
+- Retractions/corrections are new Packets referencing the original attestation.
+- A valid retraction from the original attestor **zeros the attestation’s weight** in quorum/reputation calculations while preserving history.
+
+Reference conflict handling:
+- Show all non‑retracted attestations from attestors the user trusts.
+- If conflicting claims reach quorum (e.g., both `MANIPULATED` and `UNALTERED`), mark the Packet as **contested** and, in Strict/Standard modes, let the more cautious label dominate while surfacing the disagreement (counts, sources).
 
 Characteristics:
 
@@ -603,6 +643,20 @@ Strata **does**:
 - Reduce the power of single platforms as arbiters of speech.
 - Mitigate hostile relays via multi‑path routing, client‑side consistency probes, and local relay QoS scoring that demotes/blacklists bad actors.
 
+### 12.3 Attestor Incentive Risks
+
+Economic and incentive threats sit alongside technical threats. Key vectors and current mitigations:
+
+| Attack | Attacker | Mitigation in Strata | Status |
+| --- | --- | --- | --- |
+| Bribery | Well‑funded actor | Diversity of attestors + user choice | Partial |
+| Acquisition | Corporation / state | Public attestor registry + forkable policy | Unspecified |
+| Volunteer burnout | Entropy | Future economic layers (out of protocol scope) | Out of scope |
+| State coercion | Governments | Jurisdictional diversity of attestors | Partial |
+| Sybil attestors | Anyone | Gatekeeper vetting + Web‑of‑Trust + stake | Partial |
+
+Economic incentives/funding models are intentionally **out of scope** for the protocol; transparency about these gaps helps set expectations.
+
 ---
 
 ## 13. Ecosystem & Governance
@@ -636,21 +690,22 @@ Governance principles:
 ### Phase 1 – Identity & Text Packets (“Cold Node”)
 
 - Implement StrataID creation (local keys).
-- Text‑only Packets with signatures.
-- Minimal relay with WebSocket pub/sub.
+- Text‑only Packets with signatures, plus **baseline provenance headers for any media** (`origin_type = "UNKNOWN"` if nothing stronger).
+- Minimal relay with WebSocket pub/sub **or** ship via Nostr/ActivityPub bindings (no native relay required).
 - Simple React/Vite PWA client.
 
 ### Phase 2 – Provenance & Attestations
 
 - Implement provenance_header and Genesis Events.
 - Integrate at least one hardware signing path.
+- Draft/publish the Nostr (RFC‑0100) and ActivityPub (RFC‑0101) bindings; reference client can speak both Strata Relay and these transports.
 - Define attestation schema; have the official client issue simple attestations.
 
 ### Phase 3 – Trust & Reputation v0
 
 - Implement trust edges and basic trust graph.
 - Introduce simple reputation scoring (R_total).
-- Map R_total + provenance into traffic‑light labels.
+- Map R_total + provenance into traffic‑light labels via the Trust Engine / Reality Switch (experimental overlay).
 
 ### Phase 4 – Discovery & Multiple Gatekeepers
 
@@ -666,7 +721,20 @@ Governance principles:
 
 ---
 
-## 15. Conclusion
+## 15. FAQ (Selected)
+
+### How is Strata different from C2PA?
+
+- **Scope:** C2PA focuses on provenance at capture/edit time and stores the chain of custody inside the file. Strata adds a network‑level chain of custody (Packets, edits, resharing) plus third‑party attestations and client‑side trust computation.
+- **Interoperability:** Strata consumes C2PA manifests and device/model attestations as one form of Genesis evidence.
+- **Complementarity:**
+  - C2PA without Strata: you know “this file came from device/app X,” but nothing about what independent analysts think.
+  - Strata without C2PA: you can have attestations and trust graphs but weaker capture‑time evidence.
+  - Strata + C2PA: device/app chain + multi‑party analysis + user‑controlled filtering (Reality Switch rings).
+
+---
+
+## 16. Conclusion
 
 Strata is not a truth oracle. It is a **substrate** for building healthier information ecosystems:
 

@@ -5,6 +5,7 @@
 - **Author(s):** Strata Core Team
 - **Created:** 2025-11-25
 - **Updated:** 2025-11-26
+- **Scope:** Normative protocol (reference relay transport)
 
 > **Note:** `packet_id` uses `0x` + lowercase hex encoding. See RFC-0000 5.2-5.4.  
 

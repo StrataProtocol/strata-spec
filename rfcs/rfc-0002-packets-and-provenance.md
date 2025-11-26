@@ -6,6 +6,7 @@
 - **Author(s):** Strata Core Team
 - **Created:** 2025-11-25
 - **Updated:** 2025-11-26
+- **Scope:** Normative protocol (Packet wire format, provenance headers, genesis)
 
 > **BREAKING CHANGE (2025-11-26):** `packet_id` and `genesis_id` wire encoding changed from multibase (base58btc) to `0x` + lowercase hex. See RFC-0000 5.2-5.4.  
 
@@ -65,7 +66,7 @@ Fields:
 - `nonce` – optional high‑entropy string to aid replay detection across relays.
 - `author_id` – StrataID (DID) of the author.
 - `content` – content payload (see below).
-- `provenance_header` – provenance information (optional for non‑media content).
+- `provenance_header` – provenance information. **MUST** be present when the Packet references media (e.g., `content.media` non-empty); MAY be omitted for non‑media content.
 - `attestations` – embedded attestations (see RFC‑0003) (optional). The optional top-level `attestations` array is reserved for Attestation objects as defined in RFC‑0003. Clients SHOULD treat these as “embedded attestations” and handle them identically to standalone attestation Packets once validated.
 - `consensus_metrics` – optional aggregate counters.
 - `signature` – author’s signature over the Packet.
@@ -192,7 +193,23 @@ Fields:
 
 Rules:
 - For `HARDWARE_SECURE_ENCLAVE` and `AI_MODEL`, `edit_history` **MUST** form a hash chain from genesis to the current media reference with no gaps; missing or broken chains downgrade provenance to `UNKNOWN/YELLOW`.
-- Provenance headers MAY be omitted for non‑media or trivial content; clients SHOULD then treat provenance as UNKNOWN.
+- Packets that reference media **MUST** include a `provenance_header`. For non‑media or trivial content, the header MAY be omitted; clients SHOULD then treat provenance as UNKNOWN.
+
+### 5.0 Minimum Provenance Header (Unknown)
+
+When origin is unknown or no richer provenance is available, Packets that include media **MUST** still supply the minimal header:
+
+```jsonc
+{
+  "origin_type": "UNKNOWN",
+  "genesis_media_hash": null,
+  "edit_history": []
+}
+```
+
+Clients:
+- **MUST** treat missing provenance or `origin_type = "UNKNOWN"` as “no strong provenance evidence,” not as an error.
+- **SHOULD NOT** infer provenance from omission; explicit `UNKNOWN` keeps the default machine-readable.
 
 ### 5.1 Media Storage & Availability
 

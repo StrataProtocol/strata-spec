@@ -4,6 +4,7 @@
 - **Author(s):** Strata Core Team  
 - **Created:** 2025-11-25  
 - **Updated:** 2025-11-25  
+- **Scope:** Reference (non-normative Trust Engine / Reality Switch behavior)
 
 ## 1. Summary
 
@@ -11,9 +12,9 @@ This RFC defines a **reference model** for:
 
 - Computing identity trust and reputation,
 - Mitigating Sybil attacks,
-- The high‑level behavior of the **Reality Tuner** and **Reality Switch**.
+- The high‑level behavior of the **Trust Engine** (formerly “Reality Tuner”) and **Reality Switch**.
 
-It is **non‑normative**: clients MAY implement different algorithms while respecting the same data structures.
+It is **non‑normative**: clients MAY implement different algorithms while respecting the same data structures. The Trust Engine is the client-side view filter; it does not assert truth, it only applies user policy to provenance and attestations.
 
 ## 2. Motivation
 
@@ -177,11 +178,11 @@ on_revocation(edge):
 - Identify dense subgraphs with high internal trust but low external edges.
 - Down‑weight trust contributions from such clusters until bridged by external, high‑trust nodes.
 
-## 6. Reality Tuner
+## 6. Trust Engine (Reality Tuner)
 
 ### 6.1 Inputs
 
-For each Packet `P`, Reality Tuner considers:
+For each Packet `P`, the Trust Engine (aka Reality Tuner in earlier drafts) considers:
 - `author_id` and `R_total(author_id)`,
 - `provenance_header.origin_type`,
 - Attestations and retroactive consensus status (RFC‑0003),
@@ -195,7 +196,7 @@ For each Packet `P`, Reality Tuner considers:
     - Provenance color (🟢/🟡/🔴),
     - Warnings (e.g., “Manipulated,” “Likely synthetic”).
 
-Clients SHOULD treat the Reality Tuner as the canonical decision function for feed inclusion and visibility:
+Clients SHOULD treat the Trust Engine as the canonical decision function for feed inclusion and visibility:
 - The Reality Switch (Strict / Standard / Wild) is an input to the Tuner configuration, not a separate filtering layer.
 - Application code that assembles feeds SHOULD NOT implement independent “mode flags” that bypass the Tuner’s show / blur / hide decisions, except for purely UX‑driven constraints (e.g., different surfaces over the same underlying Tuner output).
 - When an application wants a stricter or looser feed profile, it SHOULD do so by changing Tuner parameters (e.g., thresholds, quorum weights) rather than bolting on additional opaque filters.
@@ -211,7 +212,7 @@ Recommended behavior:
 - For red‑ring content:
     - Hide or blur by default,
     - Require explicit user action to view.
-- When retroactive consensus quorum is reached for negative claims (e.g., `MANIPULATED`, `ORIGIN_LIKELY_SYNTH`, `SPAM`, `ABUSIVE` per RFC‑0003 §7), the Reality Tuner SHOULD hide or heavily blur the corresponding Packets by default in Strict mode, and require explicit user action to reveal them if they are shown at all.
+- When retroactive consensus quorum is reached for negative claims (e.g., `MANIPULATED`, `ORIGIN_LIKELY_SYNTH`, `SPAM`, `ABUSIVE` per RFC‑0003 §7), the Trust Engine SHOULD hide or heavily blur the corresponding Packets by default in Strict mode, and require explicit user action to reveal them if they are shown at all.
     
 #### Standard (Default)
 Recommended behavior:
@@ -222,7 +223,7 @@ Recommended behavior:
         - 🟡 uncertain,
         - 🔴 synthetic/manipulated.
 - Use `R_total` and provenance to influence ranking, not strict visibility.
-- When negative quorum is reached, the Tuner SHOULD blur thumbnails and apply red‑ring + warning labels by default and down‑rank the content in feeds, rather than relying on a separate “flagged” mode bit outside the Tuner.
+- When negative quorum is reached, the Trust Engine SHOULD blur thumbnails and apply red‑ring + warning labels by default and down‑rank the content in feeds, rather than relying on a separate “flagged” mode bit outside the Tuner.
 
 #### Wild (Developer Mode)
 Recommended behavior:
@@ -246,7 +247,7 @@ Reference mapping from signals to ring color:
     
 Thresholds (`T_green_min`, etc.) are implementation‑specific.
 
-Clients SHOULD derive both ring color and visibility (show / blur / hide) from the Reality Tuner’s evaluation of provenance, `R_total`, and attestation quorum status, rather than from ad‑hoc per‑feature flags.
+Clients SHOULD derive both ring color and visibility (show / blur / hide) from the Trust Engine / Reality Tuner evaluation of provenance, `R_total`, and attestation quorum status, rather than from ad‑hoc per‑feature flags.
 
 ## 8. Security & Privacy Considerations
 
@@ -263,7 +264,7 @@ Clients SHOULD derive both ring color and visibility (show / blur / hide) from t
 
 ## 9. Backwards Compatibility
 - Reputation algorithms may change; underlying data structures (trust edges, stakes) MUST remain stable.
-- Clients MAY version their Reality Tuner configurations and provide migration paths.
+- Clients MAY version their Trust Engine / Reality Tuner configurations and provide migration paths.
 
 ## 10. Reference Implementation Notes
 - Reference client **SHOULD**:
