@@ -12,7 +12,7 @@ Implementers of relays, clients, SDKs, and attestor services should treat this r
 ## Current Spec Version
 
 - Baseline: `v0.0.1-spec`
-- Current tag: `v0.1.1-spec`
+- Current tag: `spec-v0.2.0`
 - Breaking changes after this point will be announced in CHANGELOG and via RFCs.
 
 ## Repository Structure
@@ -152,9 +152,12 @@ Propose an RFC or update to an existing one.
 - Use RFC 2119 language (MUST, SHOULD, MAY) where behavior is normative.
 
 ### License
-TODO: Choose and document license for the spec
-(e.g. Creative Commons Attribution 4.0 / Apache-2.0 for code examples).
-Until explicitly specified otherwise, treat this repo as not yet licensed for reuse outside the Strata project. This will be updated before public release.
+
+This specification is licensed under **[Creative Commons Attribution 4.0 International (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/)**.
+
+Copyright (c) 2025 Sean Red
+
+You are free to share and adapt this material for any purpose, including commercial use, as long as you provide appropriate attribution.
 
 ### Status
 This spec is early-stage and will evolve rapidly as:
