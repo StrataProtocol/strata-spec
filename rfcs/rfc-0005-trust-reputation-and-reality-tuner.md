@@ -85,46 +85,22 @@ where w_seed + w_wot + w_stake + w_egal = 1
   - Decay by hop distance,
   - Caps on max influence from a single origin.
 
-### 4.3 Stake
-`T_stake(i)` is derived from stake entries:
-```json
-{
-  "stake_id": "0xstake1",
-  "staker": "did:strata:foundation",
-  "beneficiary": "did:strata:journalists_guild",
-  "amount": "1000.0",
-  "asset": {
-    "symbol": "STRATA",
-    "chain": "solana-mainnet",          // or "offchain-escrow"
-    "decimals": 9
-  },
-  "locked_until": 1718023000,
-  "purpose": "reputation_boost",
-  "created_at": 1715421500,
-  "proof": {
-    "type": "onchain-tx",
-    "tx_id": "5Yg...Tx",
-    "block_height": 123456,
-    "proof_blob": "base64merkleproof..."
-  },
-  "signature": "0xStakerSig..."
-}
-```
-Proof verification registry (minimum set):
-- `chain = "solana-mainnet", proof.type = "onchain-tx"`: `tx_id` MUST reference a confirmed transaction; `proof_blob` MUST encode a Merkle/account-state proof binding `beneficiary`, `amount`, `locked_until`, and `asset` fields. Clients **MUST** validate inclusion against the referenced `block_height`.
-- `chain = "ethereum-mainnet", proof.type = "onchain-tx"`: `proof_blob` MUST be an RLP/JSON receipt+Merkle proof to the canonical block header; same field bindings as above.
-- `chain = "offchain-escrow", proof.type = "escrow-receipt"`: `proof_blob` MUST be a signed receipt by the escrow provider covering `stake_id`, `staker`, `beneficiary`, `amount`, `locked_until`, and an escrow attestor key declared in bootstrap or client policy.
-Bootstrap documents MAY extend the registry with additional `chain` values and required proof codecs; clients **MUST** treat unknown chain/proof combinations as advisory only and weight them as zero.
-Possible formula:
-`T_stake(i) = f( Σ sqrt(amount_by_distinct_stakers) )`, where:
-- Multiple diverse stakers increase trust,
-- Single whales have diminishing returns.
+### 4.3 Stake (Optional)
 
-Rules:
-- `asset` MUST specify chain/context; unknown assets are ignored.
-- `proof` MUST be provided; without a verifiable proof the stake entry is advisory only and should be down‑weighted to zero. Unknown `chain`/`proof.type` pairs follow the same rule.
-- Slashing is expressed via Packets with `content.type = "STAKE_SLASH"` referencing `stake_id` and carrying evidence; slashing events **MUST** be signed by an authorized slasher identity declared in the original stake or by community policy.
-- `locked_until` is enforced by verifying the underlying proof; clients **MUST** treat premature unlocks as slashable events.
+`T_stake(i)` represents value staked by other identities in favor of identity `i`. Staking adds economic friction for Sybil attackers — creating many fake identities becomes costly when each requires stake to gain reputation.
+
+**Core principles:**
+- Stake is **optional** — Strata does not require any token or economic layer to function.
+- Diversity matters more than magnitude: multiple independent stakers signal broader trust.
+- Diminishing returns prevent whales from dominating: `T_stake(i) ∝ f(Σ sqrt(stake_from_distinct_stakers))`.
+- Stake without verifiable proof SHOULD be weighted as zero.
+
+**Out of scope for this RFC:**
+- Specific asset types, tokens, or blockchains.
+- Proof formats and verification mechanisms.
+- Slashing rules and enforcement.
+
+These implementation details are left to future RFCs or client-specific policies. The protocol does not mandate any particular economic model.
 
 ### 4.4 Egalitarian / Behavioral
 `T_egal(i)` may consider:
