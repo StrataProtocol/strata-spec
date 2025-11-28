@@ -2,10 +2,10 @@
 
 # RFC-0001: Identity and StrataID
 
-- **Status:** Draft  
-- **Author(s):** Strata Core Team  
-- **Created:** 2025-11-25  
-- **Updated:** 2025-11-25  
+- **Status:** Draft
+- **Author(s):** Strata Core Team
+- **Created:** 2025-11-25
+- **Updated:** 2025-11-28
 - **Scope:** Normative protocol (identity, DIDs, trust edges)
 
 ---
@@ -69,21 +69,26 @@ A Strata DID Document MUST include:
 
 ```json
 {
-  "@context": "https://www.w3.org/ns/did/v1",
   "id": "did:strata:z6MkfQ...",
-  "verificationMethod": [
+  "verification_method": [
     {
       "id": "did:strata:z6MkfQ#keys-1",
       "type": "Ed25519VerificationKey2020",
       "controller": "did:strata:z6MkfQ",
-      "publicKeyMultibase": "z6MkfQ..."
+      "public_key_hex": "0x...",
+      "public_key_multibase": "z6MkfQ...",
+      "valid_from": 1715421200
     }
   ],
-  "authentication": [
-    "did:strata:z6MkfQ#keys-1"
-  ]
+  "authentication": ["did:strata:z6MkfQ#keys-1"],
+  "assertion": ["did:strata:z6MkfQ#keys-1"],
+  "created_at": 1715421200,
+  "prev_did_doc_hash": null
 }
 ```
+
+> **Wire Format Note:** Per RFC-0000 §4.3, Strata uses `snake_case` field names (e.g., `verification_method`, `public_key_multibase`) rather than W3C DID Core's `camelCase`. The `@context` field is omitted in wire format as Strata DID Documents are self-describing.
+
 - It **MAY** include:
   - Additional keys (for rotation or multi‑device),
   - Service endpoints (e.g., preferred relays),
@@ -158,6 +163,14 @@ The protocol supports:
   - DID Documents **MAY** declare dedicated recovery verification methods (e.g., `usage: "recovery"`).
   - Recovery keys **MUST** be offline or hardware-backed and **MUST NOT** sign application Packets; their only allowed use is signing `KEY_EVENT` packets when all online keys are lost or revoked.
   - Clients/relays **MUST** reject application Packets signed by recovery keys and **MUST** accept recovery-signed `KEY_EVENT` only if the recovery key is declared in the DID Document and not revoked.
+
+**Recovery Key Safeguards (RECOMMENDED):**
+
+- **Time-delay on recovery-signed KEY_EVENTs:** Implementations SHOULD treat `KEY_EVENT` Packets signed by a recovery key as pending for a configurable delay window (e.g., 24 hours) before applying them. During this window, clients MAY surface prominent warnings and allow users or other devices to dispute or override the recovery event via additional `KEY_EVENT` Packets signed by non-recovery keys (if any remain valid).
+
+- **Threshold recovery for high-value identities:** Organizations, infrastructure operators, and other high-value identities SHOULD use multi-party or threshold recovery mechanisms (e.g., M-of-N hardware keys, social recovery with trusted contacts) rather than relying on a single recovery key.
+
+- **UX guidance:** Client implementations SHOULD surface the special risk of recovery keys prominently in their UI and encourage users to store recovery keys with stronger protections than ordinary signing keys (e.g., offline storage, safety deposit box, geographically distributed backups).
 
 - **Multiple devices:**
   - A single DID may have multiple authentication keys (one per device).
@@ -284,11 +297,17 @@ To limit wash‑trading and Sybil inflation:
   - Attempts beyond the budget **SHOULD** be rejected or heavily down‑weighted.
 - Relays **MUST** rate‑limit `TRUST_EDGE` and `TRUST_REVOCATION` packets per identity to reduce spam/DoS.
 
+> **Note:** This section provides a minimal baseline budget for trust edges. For the complete set of budget parameters—including separate limits for low-strength edges and detailed accounting rules—implementers SHOULD follow RFC-0005 §5.2.
+
 ### 8. Security Considerations
 
 - Compromised keys:
   - A compromised key can impersonate an identity until revoked.
   - Clients and relays **MUST** enforce `KEY_EVENT` revocations using relay‑observed time, not author‑supplied timestamps.
+- Recovery key compromise:
+  - A compromised recovery key can perform complete identity takeover by revoking all other keys and adding attacker-controlled keys.
+  - The safeguards in Section 5.3 (time-delay, threshold recovery) are RECOMMENDED to provide defense-in-depth.
+  - Users SHOULD treat recovery keys with the same care as cryptocurrency seed phrases or root CA private keys.
 - Trust edge abuse:
   - Trust edges reveal aspects of a user’s social graph.
   - Clients **SHOULD** allow users to:
@@ -310,3 +329,38 @@ As new cryptographic primitives or DID resolution mechanisms are introduced:
   - `sign(data, privateKey)`,
   - `verify(signature, data, publicKey)`,
   - Helpers for generating and verifying trust edge Packets.
+
+#### 10.1 Implementation Status (Phase 1)
+
+As of 2025-11-27, the following features from this RFC are implemented:
+
+**strata-identity (Go + TypeScript)**:
+- Section 5.4 KEY_EVENT handling: Full implementation of ADD, ROTATE, REVOKE events
+  - Go: `key_event.go` with `KeyEventValidator`, `ValidateKeyEvent`, `ApplyKeyEvent`
+  - TypeScript: `validateKeyEvent`, `applyKeyEvent`, `createKeyEventContent`
+  - Validates authorization rules, key chains, and recovery key restrictions
+  - See `/media/sean/SHARED/DEV/strata/strata-identity/README.md` for usage
+
+- Section 5.4 Key validity windows: Full implementation with clock skew tolerance
+  - `valid_from`, `valid_until`, `revoked_at` fields on `VerificationMethod`
+  - Clock skew tolerance: 300 seconds default, range [60, 300] enforced
+  - Go: `IsKeyValidAt(vm, timestamp, clockSkew)` function
+  - TypeScript: `isKeyValidAt(vm, timestamp, clockSkew)` function
+  - Integrated into packet verification via `VMResolver` interface
+
+- Section 5.3 Recovery key restrictions: Enforced in KEY_EVENT validation
+  - Recovery keys (usage: "recovery") can ONLY sign KEY_EVENT packets
+  - `IsRecoveryKeyAuthorized(vm, contentType)` checks in Go and TypeScript
+
+**strata-relay (Go)**:
+- Section 5.4 Signature verification: Enabled by default per RFC-0004
+  - `verification.enabled: true` is default configuration
+  - Ed25519 signature verification before PUBLISH acceptance
+  - Key validity window checks using relay-observed receive time
+  - Error codes: `invalid_signature`, `key_expired`, `key_revoked`, `key_not_yet_valid`
+  - See `/media/sean/SHARED/DEV/strata/strata-relay/README.md` for configuration
+
+**Pending**:
+- Section 3.3 DID resolution from network relays (currently bootstrap-file only)
+- Section 7 Trust edge indexing and validation (server-side in relays)
+- Multi-device key management UX (client implementation)

@@ -3,8 +3,8 @@
 - **Status:** Draft  
 - **Author(s):** Strata Core Team  
 - **Created:** 2025-11-25  
-- **Updated:** 2025-11-25  
-- **Scope:** Reference (non-normative Trust Engine / Reality Switch behavior)
+- **Updated:** 2025-11-28
+- **Scope:** Mixed. §4.1 (Bootstrap Document requirements) is normative when referenced by other RFCs. All other sections are reference (non-normative) and describe recommended Trust Engine / Reality Switch behavior.
 
 ## 1. Summary
 
@@ -101,6 +101,8 @@ where w_seed + w_wot + w_stake + w_egal = 1
 - Slashing rules and enforcement.
 
 These implementation details are left to future RFCs or client-specific policies. The protocol does not mandate any particular economic model.
+
+> **Warning:** Until a dedicated stake RFC is published defining proof formats, verification mechanisms, and slashing rules, clients MUST treat stake amounts as advisory hints only. Implementations MUST NOT rely on stake alone for safety-critical decisions such as identity verification, key recovery authorization, or relay trust establishment. Stake without verifiable cryptographic proofs SHOULD be weighted as zero in security-sensitive calculations.
 
 ### 4.4 Egalitarian / Behavioral
 `T_egal(i)` may consider:
@@ -206,6 +208,22 @@ Recommended behavior:
 - Show nearly all Packets except obvious DoS/garbage.
 - Surface provenance and attestation details more prominently.
 - Allow user to “opt into” seeing even heavily flagged content.
+
+### 6.4 Content-domain misinformation handling
+- Define the set of content-level negative claims:
+
+```text
+M_content = {FACTUAL_INACCURACY, OUT_OF_CONTEXT,
+             CAPTION_MISLEADING, MISATTRIBUTED_SOURCE,
+             FABRICATED_EVENT}
+```
+
+- When retroactive consensus (§7 of RFC‑0003) reaches quorum for any `C ∈ M_content` from attestors the user trusts, mark the Packet as state `MISINFO_FLAGGED`. This is the content-domain analogue of provenance-focused quorums like `MANIPULATED` or `ORIGIN_LIKELY_SYNTH`.
+- Recommended Reality Switch handling for `MISINFO_FLAGGED`:
+  - **Strict (Grandma):** Hide from default feeds or show only as heavily blurred tiles; require an explicit “View anyway” action with a clear warning.
+  - **Standard (Default):** Show in feeds but blur thumbnails by default, apply a prominent label such as “Likely false or misleading,” and downrank in ordering.
+  - **Wild (Developer):** Show normally but attach a small warning pill and make underlying attestations easy to inspect.
+- Non-normative UX: Implementations MAY present `MISINFO_FLAGGED` with labels such as “Likely false or misleading” or “fake news?” provided the label is clearly attributable to the user’s trusted attestors/graph and users can drill down to see which attestors asserted which subjects.
 
 ## 7. Traffic‑Light Mapping
 

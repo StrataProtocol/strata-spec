@@ -3,7 +3,7 @@
 - Status: Draft
 - Author: Sean Red
 - Created: 2025-11-25
-- Updated: 2025-11-26
+- Updated: 2025-11-28
 - **Scope:** Normative conventions (terminology, canonicalization, identifiers)
 
 > **BREAKING CHANGE (2025-11-26):** Wire encoding for content-addressed identifiers (`packet_id`, `genesis_id`, `stake_id`, `bootstrap_id`) changed from multibase (base58btc) to `0x` + lowercase hex. Multibase `z` prefix is now reserved exclusively for DIDs and DID-related fields. See 5.2 and 5.4.
@@ -178,6 +178,15 @@ For hashing and signing operations (e.g., `computing packet_id`) :
 - Implementations **MUST** serialize in the same way when computing hashes and signatures.
 - The canonicalization algorithm used **MUST** be documented and kept stable across versions of a given client/library.
 
+### 4.3 Field Naming
+
+All JSON field names in Strata **MUST** use `snake_case` for consistency across the protocol. This applies to:
+- Packet fields (`packet_id`, `author_id`, `timestamp`)
+- DID Document fields (`verification_method`, `public_key_hex`, `valid_from`)
+- Content fields (`origin_type`, `media_hash`, `edit_history`)
+
+> **Note:** This diverges from W3C DID Core's `camelCase` convention (e.g., `verificationMethod`, `publicKeyMultibase`). Strata uses `snake_case` to maintain consistency with packet field naming and simplify cross-language serialization.
+
 ## 5. Hashing & Identifiers
 ### 5.1 Hash Functions
 
@@ -255,6 +264,7 @@ Values (initial):
 - `TRUST_EDGE`
 - `TRUST_REVOCATION`
 - `ATTESTATION`
+- `ATTESTATION_RETRACTION`
 - `CONFIG`
 - `STAKE`
 - `STAKE_SLASH`

@@ -5,7 +5,7 @@
 - **Status:** Draft
 - **Author(s):** Strata Core Team
 - **Created:** 2025-11-25
-- **Updated:** 2025-11-26
+- **Updated:** 2025-11-28
 - **Scope:** Normative protocol (attestations, retroactive consensus wire semantics)
 
 > **Note:** `packet_id` and content-addressed IDs use `0x` + lowercase hex encoding. See RFC-0000 5.2-5.4.  
@@ -47,6 +47,8 @@ Packets MAY include embedded attestations in the top-level `attestations` array 
     "attestation_id": "0xatt1",
     "attestor_id": "did:strata:official_client",
     "attestor_type": "CLIENT",      // CLIENT | NGO | LAB | MEDIA | MODEL_PROVIDER | OTHER
+    "target_packet": "0x1e208f2c3a4b5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7a1",
+    "domain": "PROVENANCE",         // PROVENANCE | CONTENT | SPAM_ABUSE | OTHER
     "subject": "ORIGIN_LIKELY_HUMAN",   // see below
     "confidence": 0.87,             // 0–1
     "method": "ML_MODEL_V1",
@@ -61,12 +63,16 @@ Fields:
 - `attestation_id`: unique identifier for this attestation.
 - `attestor_id`: StrataID of the attestor.
 - `attestor_type`: classification (for UX).
+- `target_packet`: `packet_id` of the Packet being attested. **REQUIRED** for all attestations.
+- `domain` (optional): what category of claim this is about. MUST be one of `PROVENANCE`, `CONTENT`, `SPAM_ABUSE`, or `OTHER`. If omitted, clients **MUST** infer it from `subject` using §4.4 to preserve backwards compatibility. Unknown enum values **MUST** be safely ignored per RFC‑0000 §4.
 - `subject`: claim subject (e.g., ORIGIN_LIKELY_HUMAN).
 - `confidence`: numeric confidence in [0,1].
 - `method`: free‑form description or version string.
 - `issued_at`: timestamp.
 - `metadata`: optional structured data.
-- `signature`: attestor’s signature over the attestation payload.
+- `signature`: attestor's signature over the attestation payload.
+
+For all attestations (embedded or standalone), the signed payload **MUST** include a `target_packet` field whose value is the `packet_id` of the Packet being attested. Attestations without `target_packet` in the signed payload **MUST** be ignored.
 
 ### 3.2 Standalone Attestation Packet
 
@@ -86,6 +92,7 @@ Attestations MAY also be sent as standalone Packets (`content.type = "ATTESTATIO
       "attestation_id": "0xatt2",
       "attestor_id": "did:ngo:forensic_lab",
       "attestor_type": "LAB",
+      "domain": "PROVENANCE",
       "subject": "MANIPULATED",
       "confidence": 0.95,
       "method": "FORENSIC_SUITE_Y",
@@ -111,6 +118,7 @@ Clients SHOULD:
     - `content.attestation.attestor_id` **MUST** equal the Packet `author_id`. If they differ, the attestation **MUST** be treated as invalid and ignored.
     - `content.attestation.target_packet` **MUST** reference the packet_id being attested; mismatches or malformed references **MUST** cause the attestation to be ignored.
   - For embedded attestations in `packet.attestations`:
+    - `target_packet` **MUST** equal the host Packet's `packet_id`. Clients **MUST** ignore embedded attestations whose `target_packet` does not match the host `packet_id`.
     - `attestor_id` MAY be different from `author_id`, but the signature **MUST** verify against `attestor_id`.
   - Clients **MUST** treat embedded and standalone attestations that pass validation as equivalent inputs and **MUST** merge them by `(target_packet, attestation_id)` when computing quorums. Duplicate attestations (same `attestation_id` from the same attestor) **MUST NOT** be double-counted.
   - Attestations that fail any of the checks above (invalid signature, inconsistent `attestor_id`, mismatched `target_packet`) **MUST** be ignored for scoring and quorum purposes, but MAY be surfaced in advanced debugging views as “invalid.”
@@ -136,7 +144,13 @@ Rules:
 - A retraction **MUST** zero the referenced attestation’s weight in quorum/reputation calculations while preserving auditability of the original claim.
 - If multiple retractions exist from the attestor, the latest by relay‑observed `received_at` wins (tie‑break by lexicographically smallest `packet_id`).
 
-### 3.4 Append-Only Attestation History
+### 3.4 Attestation Signature Scope
+
+The `signature` field in an Attestation object **MUST** be computed over the canonical JSON representation of the Attestation object with the `signature` field omitted, using the canonicalization rules from RFC-0000 §4.2. The signed payload **MUST** include at minimum: `attestation_id`, `attestor_id`, `target_packet`, `subject`, `confidence`, and `issued_at`.
+
+This binding prevents claim-rebinding attacks where an attestation is copied from one Packet to another. Because `target_packet` is included in the signed payload, any attempt to embed the attestation in a different Packet will cause signature verification to fail.
+
+### 3.5 Append-Only Attestation History
 
 Attestations, corrections, and retractions are append‑only:
 - Existing attestation objects are **never** edited in place.
@@ -145,26 +159,48 @@ Attestations, corrections, and retractions are append‑only:
 
 ## 4. Claim Types
 
-The `subject` field identifies what is being claimed. Recommended initial enumeration:
+Attestations are explicitly two-dimensional: `domain` (what kind of thing is being judged) and `subject` (the specific claim). Clients MAY introduce additional subjects over time; unknown values MUST be ignored per RFC‑0000 §4.
 
-- Provenance Analysis:
-    - `ORIGIN_LIKELY_HUMAN`
-    - `ORIGIN_LIKELY_SYNTH`
-    - `MANIPULATED`
-    - `UNALTERED_HARDWARE_CAPTURE`
+### 4.1 Domain: PROVENANCE
+- `ORIGIN_LIKELY_HUMAN`  
+  Analysis suggests the media was likely created by a human (non‑AI) workflow.
+- `ORIGIN_LIKELY_SYNTH`  
+  Analysis suggests the media was likely created by an AI model.
+- `MANIPULATED`  
+  Pixels / audio have been materially altered post‑capture in a way that changes the apparent meaning (e.g., face swap, splice). Distinct from benign cropping/brightness tweaks.
+- `UNALTERED_HARDWARE_CAPTURE`  
+  For content with a full hardware chain: no edits detected beyond benign transformations, and the chain validates.
 
-- Fact-Checking:
-    - `CAPTION_MISLEADING`
-    - `OUT_OF_CONTEXT`
-    - `FACTUAL_INACCURACY`
-    - `MISATTRIBUTED_SOURCE`
+### 4.2 Domain: CONTENT
+- `FACTUAL_INACCURACY`  
+  One or more core factual claims in the packet are verifiably false, given the attestor’s evidence.
+- `OUT_OF_CONTEXT`  
+  The media is real but the claimed time / place / event is wrong (e.g., old protest clip presented as new).
+- `CAPTION_MISLEADING`  
+  Caption/headline/overlay materially misdescribes what’s in the media, even if the raw media is real and in context.
+- `MISATTRIBUTED_SOURCE`  
+  Wrong identity or organization credited or blamed for the content or event.
+- `FABRICATED_EVENT`  
+  The narrative describes an event that the attestor asserts did not happen at all (e.g., “explosion in X city today” where no such event occurred).
 
-- Spam/Abuse:
-    - `SPAM`
-    - `ABUSIVE`
-    - `SCAM`
+### 4.3 Domain: SPAM_ABUSE
+- `SPAM`  
+  Low‑value, repetitive, or automated promotional/garbage content.
+- `ABUSIVE`  
+  Targeted harassment, slurs, threats, etc.
+- `SCAM`  
+  Financial or other fraud attempts.
 
-Each claim type may have its own thresholds and handling in clients.
+### 4.4 Domain inference (backwards compatibility)
+If `domain` is absent, clients **MUST** infer it using:
+
+```text
+PROVENANCE ← {ORIGIN_LIKELY_HUMAN, ORIGIN_LIKELY_SYNTH, MANIPULATED, UNALTERED_HARDWARE_CAPTURE}
+CONTENT    ← {FACTUAL_INACCURACY, OUT_OF_CONTEXT, CAPTION_MISLEADING, MISATTRIBUTED_SOURCE, FABRICATED_EVENT}
+SPAM_ABUSE ← {SPAM, ABUSIVE, SCAM}
+```
+
+Implementations SHOULD emit `domain` going forward; legacy attestations without it remain valid through this mapping. Each claim type may have its own thresholds and handling in clients.
 
 ## 5. Attestor Types
 
@@ -269,7 +305,8 @@ Reference clients SHOULD:
 
 ### 9. Backwards Compatibility
 - Introduction of new claim types or attestor types MUST be backward compatible.
-- Unknown `subject` or `attestor_type` values MUST be safely ignored by clients, treated as unrecognized but not necessarily untrusted.
+- Unknown `domain`, `subject`, or `attestor_type` values MUST be safely ignored by clients, treated as unrecognized but not necessarily untrusted.
+- Attestations without `domain` MUST continue to function via the inference table in §4.4.
 
 ### 10. Reference Implementation Notes
 

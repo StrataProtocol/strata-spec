@@ -5,7 +5,7 @@
 - **Status:** Draft
 - **Author(s):** Strata Core Team
 - **Created:** 2025-11-25
-- **Updated:** 2025-11-26
+- **Updated:** 2025-11-28
 - **Scope:** Normative protocol (Packet wire format, provenance headers, genesis)
 
 > **BREAKING CHANGE (2025-11-26):** `packet_id` and `genesis_id` wire encoding changed from multibase (base58btc) to `0x` + lowercase hex. See RFC-0000 5.2-5.4.  
@@ -67,7 +67,7 @@ Fields:
 - `author_id` – StrataID (DID) of the author.
 - `content` – content payload (see below).
 - `provenance_header` – provenance information. **MUST** be present when the Packet references media (e.g., `content.media` non-empty); MAY be omitted for non‑media content.
-- `attestations` – embedded attestations (see RFC‑0003) (optional). The optional top-level `attestations` array is reserved for Attestation objects as defined in RFC‑0003. Clients SHOULD treat these as “embedded attestations” and handle them identically to standalone attestation Packets once validated.
+- `attestations` – embedded attestations (see RFC‑0003) (optional). Each embedded attestation **MUST** include a `target_packet` field matching this Packet's `packet_id`; see RFC‑0003 §3.4 for signature and validation rules. The optional top-level `attestations` array is reserved for Attestation objects as defined in RFC‑0003. Clients SHOULD treat these as "embedded attestations" and handle them identically to standalone attestation Packets once validated.
 - `consensus_metrics` – optional aggregate counters.
 - `signature` – author’s signature over the Packet.
 ```
@@ -107,6 +107,8 @@ Content types are extensible. Clients **SHOULD** gracefully ignore unknown types
 - If `expires_at` is set, relays **MUST** stop serving the Packet after `expires_at`. Clients **MAY** delete cached ciphertext/media after that time.
 - `nonce` is OPTIONAL and can be used by relays to detect cross‑relay replays of the same Packet body prior to `packet_id` computation collisions.
 
+When a client receives the same `packet_id` from multiple relays with different `received_at` values, it MUST use the earliest `received_at` for all age-based and quorum calculations. Implementations MAY retain per-relay `received_at` values for debugging or advanced analysis, but MUST use a deterministic rule (earliest is REQUIRED) for security-sensitive logic including key validity windows, retroactive consensus timing, and trust budget accounting.
+
 ### 3.4 Corrections and Retractions
 
 Strata has no hard delete. To correct or retract information:
@@ -116,6 +118,16 @@ Strata has no hard delete. To correct or retract information:
 - Ordering: if multiple valid corrections exist from the original author/attestor, the latest by relay‑observed `received_at` **MUST** win (tie‑break by lexicographically smallest `packet_id`).
 - Attestors retracting a mistaken attestation **SHOULD** emit either a `CORRECTION` with `action: "retract"` or an `ATTESTATION_RETRACTION` Packet (see RFC‑0003); either form **MUST** zero the attestation’s weight in quorum calculations.
 - Clients **SHOULD** surface the correction link prominently and down‑rank or blur superseded Packets but MUST retain original history for auditability.
+
+### 3.5 Packet Size Constraints
+
+Implementations MUST enforce a maximum size for the canonical JSON representation of a Packet (excluding transport framing).
+
+- **RECOMMENDED default:** 256 KiB (262,144 bytes)
+- **Hard limit:** Implementations SHOULD NOT accept Packets larger than 1 MiB; values exceeding this are strongly discouraged and MAY be rejected without further processing.
+- Large media MUST be stored out-of-band and referenced via `media_hash` (see §5.1); the Packet itself should contain only metadata and references.
+
+Clients SHOULD NOT construct Packets whose canonical JSON exceeds 256 KiB.
 
 ## 4. Canonicalization and Packet ID
 ### 4.1 Canonicalization
@@ -222,6 +234,9 @@ Clients:
 
 ## 6. Genesis Events
 A Genesis Event is a standalone object that records the initial origin of specific media.
+
+### 6.1 Genesis Event Structure
+
 ```jsonc
 {
   "genesis_id": "0x1e20b1c2d3e4f5061728394a5b6c7d8e9f0a1b2c3d4e5f6071829304a5b6c7d8e9",
@@ -283,15 +298,147 @@ Fields:
 - `issuer_chain`:
   - Ordered certificates/attestations anchoring `device_public_key` (or model key) to a manufacturer/provider root.
 - `attestation_evidence`:
-  - Structured evidence (e.g., Android/Apple hardware attestation, C2PA assertion) binding device/model key to hardware/model and nonce.
+  - Structured evidence binding device/model/app to hardware/platform. See §6.3 for supported formats.
 
 Genesis Events are referenced by genesis_media_hash or genesis_id from Packets.
 They allow independent verification of hardware/model claims.
 
-Verification requirements:
+### 6.2 Software Details and Capture Methods
+
+For `origin_type = SOFTWARE`, the `details.software` object supports an extended schema for app‑based capture:
+
+```jsonc
+{
+  "software": {
+    "software_id": "did:strata:official_camera_app",
+    "software_version": "1.0.0",
+    "creation_timestamp": 1715421000,
+    "capture_method": "DIRECT_CAMERA_API",
+    "device_metadata": {
+      "platform": "ios",
+      "os_version": "17.0",
+      "device_model": "iPhone 15 Pro",
+      "gps": { "lat": 37.7749, "lon": -122.4194 }
+    }
+  }
+}
+```
+
+Fields:
+- `software_id` – StrataID (DID) of the capture application. Clients use this to determine app trust level.
+- `software_version` – Version string of the software.
+- `creation_timestamp` – Unix epoch seconds when capture/creation occurred.
+- `capture_method` (optional) – How media was acquired:
+  - `DIRECT_CAMERA_API` – Captured directly from device camera API (not from gallery/file system).
+  - `SCREEN_CAPTURE` – Captured from screen recording.
+  - `FILE_IMPORT` – Imported from file system or gallery.
+  - `GENERATED` – Programmatically generated (non‑AI).
+  - Omitted or `null` – Unknown capture method.
+- `device_metadata` (optional) – Best‑effort device information (not cryptographically verified):
+  - `platform` – `ios`, `android`, `web`, `desktop`.
+  - `os_version` – Operating system version string.
+  - `device_model` – Device model identifier.
+  - `gps` – Location at capture time (if permitted by user).
+
+**Trust Hierarchy for SOFTWARE origin:**
+
+| Scenario | Trust Level | Traffic Light |
+|----------|-------------|---------------|
+| Trusted app + platform attestation + DIRECT_CAMERA_API | High | Yellow‑Green |
+| Trusted app + DIRECT_CAMERA_API (no platform attestation) | Medium | Yellow |
+| Trusted app + FILE_IMPORT | Low | Yellow |
+| Unknown app or no capture_method | Minimal | Yellow |
+
+Clients **MUST** verify `software_id` against their trusted capture apps list (see RFC‑0006) before elevating trust.
+
+### 6.3 Attestation Evidence Formats
+
+The `attestation_evidence` field supports multiple formats for binding genesis claims to verifiable platform assertions:
+
+```jsonc
+{
+  "attestation_evidence": {
+    "format": "<format-identifier>",
+    "payload": "base64url(...)",
+    "nonce": "base64url(...)"
+  }
+}
+```
+
+**Supported formats:**
+
+| Format | Platform | What It Proves |
+|--------|----------|----------------|
+| `android-key-attestation` | Android | Key generated in hardware TEE; device not rooted |
+| `apple-device-attestation` | iOS | Device has secure enclave; capture signed by device |
+| `apple-app-attest` | iOS | App is genuine (correct bundle ID), running on real device, unmodified |
+| `play-integrity` | Android | App is genuine (correct package), device passes integrity checks |
+| `c2pa` | Cross‑platform | C2PA manifest with claim/assertion chain |
+
+**Format: `apple-app-attest`**
+
+Used by Strata capture apps on iOS to prove app authenticity without hardware‑level capture signing.
+
+```jsonc
+{
+  "format": "apple-app-attest",
+  "payload": "base64url(CBOR attestation object from DCAppAttestService)",
+  "nonce": "base64url(SHA256(genesis_id || media_hash))"
+}
+```
+
+Verification:
+1. Decode CBOR attestation object from `payload`.
+2. Verify attestation certificate chain roots to Apple App Attest CA.
+3. Verify `nonce` matches `SHA256(genesis_id || media_hash)`.
+4. Extract `rpIdHash` and verify it matches expected app bundle ID hash.
+5. Verify counter and risk metric if present.
+
+**Format: `play-integrity`**
+
+Used by Strata capture apps on Android to prove app and device integrity.
+
+```jsonc
+{
+  "format": "play-integrity",
+  "payload": "base64url(integrity token JWT)",
+  "nonce": "base64url(SHA256(genesis_id || media_hash))"
+}
+```
+
+Verification:
+1. Decode and verify JWT signature against Google's public keys.
+2. Verify `nonce` claim matches `SHA256(genesis_id || media_hash)`.
+3. Check `appIntegrity.appRecognitionVerdict` is `PLAY_RECOGNIZED`.
+4. Check `deviceIntegrity.deviceRecognitionVerdict` meets minimum threshold.
+5. Verify `requestDetails.requestPackageName` matches expected package.
+
+**Format: `c2pa`**
+
+Used when media includes a C2PA manifest (e.g., from Adobe tools or hardware with C2PA support).
+
+```jsonc
+{
+  "format": "c2pa",
+  "payload": "base64url(JUMBF C2PA manifest)",
+  "nonce": null
+}
+```
+
+Verification:
+1. Parse JUMBF manifest and extract claim/assertion chain.
+2. Verify signatures against C2PA trust list or known roots.
+3. Map C2PA assertions to Strata provenance claims.
+
+### 6.4 Verification Requirements
+
 - For `origin_type = HARDWARE_SECURE_ENCLAVE`, Genesis Events **MUST** include `issuer_chain` that chains to hardware manufacturer roots distributed in bootstrap documents; clients **MUST** validate the chain and attestation evidence. If missing or invalid, provenance for that media **MUST** be treated as `UNKNOWN/SOFTWARE`.
 - For `origin_type = AI_MODEL`, `issuer_chain` anchors the model/provider key; clients **MUST** verify the chain against model provider roots from bootstrap documents or local policy.
+- For `origin_type = SOFTWARE` with `capture_method = DIRECT_CAMERA_API`:
+  - If `attestation_evidence` with `apple-app-attest` or `play-integrity` is present and valid, AND `software_id` is in the client's trusted capture apps list, clients **MAY** treat this as elevated trust (yellow‑green).
+  - If attestation is missing or invalid, clients **MUST** treat as standard SOFTWARE (yellow).
 - `device_public_key` and model keys are authenticated via the validated chain; unsigned or self‑asserted keys are insufficient for green‑ring treatment.
+- App attestation (`apple-app-attest`, `play-integrity`) does NOT prove hardware capture; it proves the app is genuine. Clients **MUST NOT** treat app attestation as equivalent to hardware attestation.
 
 ## 7. Consensus Metrics
 

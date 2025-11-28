@@ -12,7 +12,7 @@ Implementers of relays, clients, SDKs, and attestor services should treat this r
 ## Current Spec Version
 
 - Baseline: `v0.0.1-spec`
-- Current tag: `spec-v0.2.0`
+- Current tag: `spec-v0.3.0`
 - Breaking changes after this point will be announced in CHANGELOG and via RFCs.
 
 ## Repository Structure
@@ -31,6 +31,8 @@ strata-spec/
     rfc-0003-attestations-and-retroactive-consensus.md
     rfc-0004-relay-transport-protocol.md
     rfc-0005-trust-reputation-and-reality-tuner.md
+    rfc-0007-relay-federation-and-replication.md
+    rfc-0200-social-content-types-v1.md
     rfc-0100-strata-over-nostr.md         (planned binding)
     rfc-0101-strata-over-activitypub.md   (planned binding)
   strata-identity/ (reference resolver implementation, Layer 0)
@@ -40,7 +42,7 @@ strata-spec/
 
 | Category | Docs |
 | --- | --- |
-| Protocol (MUST) | RFC‑0000–0004 (normative: terminology, identity, packets/provenance, attestations, relay transport) |
+| Protocol (MUST) | RFC‑0000–0004, RFC‑0007, RFC‑0200 (normative: terminology, identity, packets/provenance, attestations, relay transport, relay federation/replication, social content types) |
 | Reference (SHOULD) | RFC‑0005 (non‑normative Trust Engine / Reality Switch reference), future reputation profile RFCs |
 | Out‑of‑Scope / Context | whitepaper.md §12–13 (threat model, governance/economics), separate governance notes |
 

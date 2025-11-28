@@ -4,7 +4,7 @@
 - **Status:** Draft
 - **Author(s):** Strata Core Team
 - **Created:** 2025-11-25
-- **Updated:** 2025-11-26
+- **Updated:** 2025-11-28
 - **Scope:** Normative protocol (reference relay transport)
 
 > **Note:** `packet_id` uses `0x` + lowercase hex encoding. See RFC-0000 5.2-5.4.  
@@ -98,6 +98,7 @@ Client → Relay:
 
 Relay behavior:
 - **MUST** verify packet signature and schema,
+- **MUST** reject Packets exceeding the relay's configured `max_packet_bytes` with `ERROR code: "packet_too_large"`,
 - **MAY** check against local policy,
 - **On success**:
   - Stores Packet,
@@ -152,6 +153,7 @@ Relay → Client:
 Common codes:
 - `invalid_signature`
 - `invalid_schema`
+- `packet_too_large`
 - `rate_limited`
 - `blocked_author`
 - `unauthenticated`
@@ -253,12 +255,14 @@ However, relays MUST:
 
 ### 5.1 Public vs Private Content
 
+> **Non-Normative Placeholder:** The encryption details in this section are non-normative guidance only. A complete secure messaging specification (key exchange, session management, group messaging) is deferred to a future RFC-00XX. Until that RFC is published, implementations SHOULD NOT claim interoperable encrypted messaging based on this section alone.
+
 - Public posts:
   - `content` MAY be plaintext.
   - Provenance, attestations, and metadata are visible.
 - Private messages (`content.type = "MESSAGE"`):
-  - `content` MUST be end‑to‑end encrypted.
-  - Recommended baseline:
+  - `content` SHOULD be end-to-end encrypted when the messaging RFC (RFC-00XX) is implemented.
+  - The following is provided as non-normative reference for implementers exploring early encrypted messaging:
     - Key agreement: X25519,
     - AEAD: XChaCha20‑Poly1305,
     - KDF: HKDF‑SHA256,
@@ -279,6 +283,9 @@ However, relays MUST:
   }
 }
 ```
+
+**Interoperability Note:** The `scheme` string and envelope format shown above are illustrative. Conformant implementations MUST NOT assume interoperability with other implementations based solely on matching `scheme` strings until RFC-00XX defines the complete handshake and session protocol.
+
   - Relays should see only:
     - Encrypted blob,
     - Minimal routing metadata (recipient DIDs or blinded tokens if possible).
@@ -314,6 +321,23 @@ It is recommended that:
   - `window_seconds` (optional).
 - Rate limits MAY be scoped to authenticated identity (preferred) or IP address (fallback).
 - Clients **SHOULD** distinguish `rate_limited` from other failures and back off accordingly.
+
+### 6.2 Size Limits
+
+Relays MUST enforce maximum Packet sizes per RFC-0002 §3.5. Relays MAY configure lower limits than the protocol maximum based on operational requirements.
+
+When rejecting oversized Packets, relays MUST respond with:
+
+```json
+{
+  "type": "ERROR",
+  "code": "packet_too_large",
+  "reason": "Packet exceeds maximum size of N bytes",
+  "max_bytes": 262144
+}
+```
+
+The `max_bytes` field is OPTIONAL but RECOMMENDED to help clients adjust.
 
 ## 7. Client-Side Relay QoS Reputation
 
