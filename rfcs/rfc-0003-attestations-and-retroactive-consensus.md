@@ -5,7 +5,7 @@
 - **Status:** Draft
 - **Author(s):** Strata Core Team
 - **Created:** 2025-11-25
-- **Updated:** 2025-11-28
+- **Updated:** 2025-12-02
 - **Scope:** Normative protocol (attestations, retroactive consensus wire semantics)
 
 > **Note:** `packet_id` and content-addressed IDs use `0x` + lowercase hex encoding. See RFC-0000 5.2-5.4.  
@@ -46,7 +46,7 @@ Packets MAY include embedded attestations in the top-level `attestations` array 
   {
     "attestation_id": "0xatt1",
     "attestor_id": "did:strata:official_client",
-    "attestor_type": "CLIENT",      // CLIENT | NGO | LAB | MEDIA | MODEL_PROVIDER | OTHER
+    "attestor_type": "CLIENT",      // CLIENT | NGO | LAB | MEDIA | MODEL_PROVIDER | IDENTITY_GATE | OTHER
     "target_packet": "0x1e208f2c3a4b5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7a1",
     "domain": "PROVENANCE",         // PROVENANCE | CONTENT | SPAM_ABUSE | OTHER
     "subject": "ORIGIN_LIKELY_HUMAN",   // see below
@@ -211,6 +211,7 @@ Implementations SHOULD emit `domain` going forward; legacy attestations without 
 - `LAB` – forensic analysis lab.
 - `MEDIA` – newsroom or journalistic collective.
 - `MODEL_PROVIDER` – AI model or platform that generated content.
+- `IDENTITY_GATE` – service that provisions StrataIDs and issues verification attestations (RFC-0001 §9).
 - `OTHER` – fallback.
 
 This field is primarily for UX; trust is determined by attestor_id and reputation, not by attestor_type.

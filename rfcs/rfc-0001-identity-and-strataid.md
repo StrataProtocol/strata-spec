@@ -5,7 +5,7 @@
 - **Status:** Draft
 - **Author(s):** Strata Core Team
 - **Created:** 2025-11-25
-- **Updated:** 2025-11-28
+- **Updated:** 2025-12-02
 - **Scope:** Normative protocol (identity, DIDs, trust edges)
 
 ---
@@ -315,13 +315,78 @@ To limit wash‑trading and Sybil inflation:
     - Limit publication of edges by default.
   - Wash‑trading is mitigated via explicit revocation packets and enforced trust budgets.
 
-### 9. Backwards Compatibility
+### 9. Identity Gate Verification Attestations
+
+Identity gates are services that provision StrataIDs. When an identity gate performs verification during provisioning (e.g., email, phone, government ID), it SHOULD issue a verification attestation to record the level of verification performed.
+
+#### 9.1 Verification Attestation Format
+
+```json
+{
+  "type": "strata.identity.verification",
+  "subject_id": "did:strata:z6Mkf...",
+  "claims": {
+    "verification_level": "phone",
+    "verification_method": "sms_otp",
+    "verified_at": 1733097600,
+    "gate_version": "1.0.0"
+  },
+  "attestor_id": "did:strata:gate-xyz",
+  "attestor_type": "IDENTITY_GATE"
+}
+```
+
+This attestation is embedded in a Packet signed by the identity gate's key. The `subject_id` is the newly provisioned StrataID.
+
+#### 9.2 Verification Levels
+
+| Level | Description | Example Methods |
+|-------|-------------|-----------------|
+| `none` | No verification performed | Self-registration |
+| `email` | Email address ownership verified | Email link, OTP |
+| `phone` | Phone number ownership verified | SMS OTP, voice call |
+| `government_id` | Government-issued ID verified | Document scan + liveness |
+| `biometric` | Biometric verification | Face match, fingerprint |
+
+Levels are ordered by strength: `none < email < phone < government_id < biometric`.
+
+#### 9.3 Client Interpretation
+
+Clients SHOULD use verification attestations to:
+- Adjust Initial Confidence Boost parameters (RFC-0005 §4.5),
+- Inform trust decisions about new identities,
+- Display verification badges in UI.
+
+Clients MUST validate that:
+- The attestation is signed by a valid identity gate key,
+- The identity gate's StrataID is trusted (via seed trust, WoT, or explicit configuration),
+- The `subject_id` matches the identity being evaluated.
+
+Clients MUST NOT trust verification attestations from unknown or untrusted identity gates.
+
+#### 9.4 Identity Gate Trust
+
+Identity gates MAY be:
+- Designated as seed identities in Bootstrap Documents (highest trust),
+- Trusted via Web-of-Trust edges from other trusted gates,
+- Explicitly configured by the user or client operator.
+
+Clients SHOULD allow users to configure which identity gates they trust for verification attestations. A verification attestation from an untrusted gate MUST be treated as `verification_level: none`.
+
+#### 9.5 Privacy Considerations
+
+- Verification attestations reveal that an identity was provisioned by a specific gate.
+- Gates MUST NOT include personally identifiable information (PII) in attestations.
+- The `verification_method` field is advisory; it MUST NOT contain raw verification data (phone numbers, ID numbers, etc.).
+- Users SHOULD be informed during provisioning that a verification attestation will be published.
+
+### 10. Backwards Compatibility
 
 As new cryptographic primitives or DID resolution mechanisms are introduced:
 - Existing DIDs and trust edges **MUST** remain valid.
 - New features **SHOULD** be additive and signaled via versioning or feature flags.
 
-### 10. Reference Implementation Notes
+### 11. Reference Implementation Notes
 
 - A TypeScript reference library **SHOULD** provide:
   - `createKeypair()`,
@@ -330,7 +395,7 @@ As new cryptographic primitives or DID resolution mechanisms are introduced:
   - `verify(signature, data, publicKey)`,
   - Helpers for generating and verifying trust edge Packets.
 
-#### 10.1 Implementation Status (Phase 1)
+#### 11.1 Implementation Status (Phase 1)
 
 As of 2025-11-27, the following features from this RFC are implemented:
 

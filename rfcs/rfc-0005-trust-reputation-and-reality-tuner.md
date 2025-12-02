@@ -3,7 +3,7 @@
 - **Status:** Draft  
 - **Author(s):** Strata Core Team  
 - **Created:** 2025-11-25  
-- **Updated:** 2025-11-28
+- **Updated:** 2025-12-02
 - **Scope:** Mixed. §4.1 (Bootstrap Document requirements) is normative when referenced by other RFCs. All other sections are reference (non-normative) and describe recommended Trust Engine / Reality Switch behavior.
 
 ## 1. Summary
@@ -56,8 +56,10 @@ T(i) = w_seed * T_seed(i)
      + w_wot  * T_wot(i)
      + w_stake * T_stake(i)
      + w_egal * T_egal(i)
+     + T_boost(i)
 
 where w_seed + w_wot + w_stake + w_egal = 1
+and T_boost is an additive decaying term for new identities (see §4.5)
 ```
 
 ### 4.1 Seed Trust
@@ -115,6 +117,52 @@ Example:
 T_egal(i) = clamp( log(age_days + 1) / log(K) ) * (1 - report_penalty)
 ```
 Where `K` is a scaling constant and `report_penalty` is derived from validated abuse reports.
+
+### 4.5 Initial Confidence Boost (Newcomer Grace)
+
+To distinguish "unknown" (insufficient signal) from "distrusted" (negative signal), clients SHOULD apply a decaying confidence boost to new identities. This addresses the cold-start problem: without a boost, legitimate new users start at effectively 0% trust, which conflates absence of evidence with evidence of untrustworthiness.
+
+**Rationale:**
+- A new user with no trust edges, no seed endorsement, and minimal account age would otherwise score near zero.
+- Zero trust creates a hostile onboarding experience and a chicken-and-egg adoption problem.
+- The boost represents "benefit of the doubt" that decays as the identity either builds real trust or fails to.
+
+**Reference formula:**
+```text
+T_boost(i) = B_max * V_mult(i) * decay(age_days)
+
+where:
+  B_max     = maximum boost (reference: 0.30)
+  V_mult(i) = verification multiplier from identity gate attestation (see below)
+  decay(age_days) = max(0, 1 - age_days / G)
+  G         = grace period in days (reference: 30)
+  age_days  = days since first relay-observed packet from identity i
+```
+
+**Verification multiplier (`V_mult`):**
+
+Identity gates (services that provision StrataIDs) MAY issue verification attestations indicating the level of identity verification performed during provisioning. Clients SHOULD use these attestations to adjust the boost parameters:
+
+| `verification_level` | `V_mult` | Grace Period (G) | Description |
+|---------------------|----------|------------------|-------------|
+| `none`              | 0.50     | 14 days          | No verification performed |
+| `email`             | 0.80     | 30 days          | Email address verified |
+| `phone`             | 1.00     | 45 days          | Phone number verified (SMS/call) |
+| `government_id`     | 1.20     | 60 days          | Government-issued ID verified |
+| `biometric`         | 1.30     | 90 days          | Biometric verification (e.g., liveness check) |
+
+The verification attestation format is defined in RFC-0001 §9. Clients MUST validate that the attestation is signed by a trusted identity gate before applying `V_mult > 0.5`.
+
+**Constraints:**
+- `T_boost` alone MUST NOT enable an identity to reach the green threshold (`T_green_min`, typically 0.6). With reference parameters: `B_max * V_mult_max = 0.30 * 1.30 = 0.39 < 0.6`. ✓
+- Abuse reports or spam flags during the grace period MAY accelerate decay (e.g., multiply decay rate by 2–4x).
+- The final trust score remains capped: `T(i) = min(1.0, T(i))`.
+- If an identity has sufficient real trust signals (`T_seed + T_wot >= B_max`), clients MAY skip the boost entirely.
+
+**Implementation notes:**
+- The boost is client-computed; relays do not enforce or interpret it.
+- `age_days` MUST be derived from the earliest `received_at` observed across relays, not author-supplied timestamps.
+- Clients SHOULD cache and recompute boost values as identities age.
 
 ## 5. Sybil Mitigation
 Key techniques:

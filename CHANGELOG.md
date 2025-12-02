@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v0.4.1-spec] - 2025-12-02
+
+### Added
+- **Initial Confidence Boost (Newcomer Grace):** RFC-0005 §4.5 introduces a decaying trust boost for new identities to distinguish "unknown" from "distrusted." This addresses the cold-start problem where legitimate new users would otherwise start at effectively 0% trust. Reference formula: `T_boost = B_max * V_mult * decay(age)` with client-tunable parameters.
+- **Identity Gate Verification Attestations:** RFC-0001 §9 defines a new attestation type (`strata.identity.verification`) that identity gates issue to record the verification level performed during StrataID provisioning (none, email, phone, government_id, biometric). Clients use these attestations to adjust Initial Confidence Boost parameters.
+- **IDENTITY_GATE attestor type:** RFC-0003 §5 adds `IDENTITY_GATE` to the attestor_type enum for services that provision StrataIDs.
+
+### Protocol Clarifications
+- **Verification-adjusted grace periods:** Higher verification levels (phone, government_id, biometric) extend the grace period and boost multiplier, providing stronger benefit-of-the-doubt for more thoroughly verified identities.
+- **Boost constraints:** `T_boost` alone cannot reach green threshold (`T_green_min`), ensuring real trust signals are still required for full trust status.
+
 ## [v0.4.0-spec] - 2025-11-28
 
 ### Security Fixes

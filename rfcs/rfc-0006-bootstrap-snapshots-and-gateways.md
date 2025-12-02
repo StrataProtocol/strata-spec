@@ -248,6 +248,32 @@ Fields:
 
 Implementations **MUST** ignore unknown fields in the `CONFIG` object, per RFC‑0000 JSON rules.
 
+### 5.1.1 Advisory Nature of Capture App Lists
+
+The `trusted_capture_apps` field is **strictly advisory**. To preserve user autonomy and prevent centralized gatekeeping (per Axioms 4.2, 4.5, 4.6):
+
+1. **User Control**: Clients **MUST** allow users to:
+   - View, edit, disable, or extend the trusted capture apps list.
+   - Override snapshot-provided lists with their own preferences.
+   - Disable capture app trust entirely.
+
+2. **Trust Levels**: Clients **MUST NOT**:
+   - Treat missing app attestation as "untrusted" (red ring).
+   - Automatically hide or filter content lacking app attestation.
+   - Require app attestation for content to be visible.
+
+3. **Signal Weight**: Verified capture app attestation **SHOULD**:
+   - Be treated as ONE signal among many (not a guarantee).
+   - Contribute to yellow-green trust level, not automatic green.
+   - Be clearly labeled in UI as "Verified capture app" rather than implying absolute trust.
+
+4. **Transparency**: Clients **SHOULD**:
+   - Display which capture apps are trusted and why.
+   - Show provenance details including app attestation status.
+   - Allow users to inspect the full attestation chain.
+
+This ensures capture app trust enhances rather than replaces the pluralistic attestation model. Hardware/app attestations provide evidence, not verdicts.
+
 ### 5.2 Signature and Validation
 
 Bootstrap Snapshot Packets:
@@ -316,6 +342,7 @@ Clients **MAY** implement support for Bootstrap Snapshots. If they do, they **MU
 3. Treat all Snapshot content as **advisory**:
    - `relays` suggestions MAY be used to prioritize or discover relays but MUST NOT override explicit user configuration.
    - `seed_gatekeepers`, `hardware_roots`, and `model_roots` MUST be cross‑checked against validated Bootstrap Documents before affecting trust engine behavior.
+   - `trusted_capture_apps` **MUST** be user-editable and **MUST NOT** be required for content visibility. See §5.1.1.
 
 ### 6.3 Multi‑Snapshot and Quorum Handling (Recommended)
 
