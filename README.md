@@ -12,7 +12,7 @@ Implementers of relays, clients, SDKs, and attestor services should treat this r
 ## Current Spec Version
 
 - Baseline: `v0.0.1-spec`
-- Current tag: `spec-v0.4.1`
+- Current tag: `spec-v0.4.5`
 - Breaking changes after this point will be announced in CHANGELOG and via RFCs.
 
 ## Repository Structure
@@ -31,10 +31,18 @@ strata-spec/
     rfc-0003-attestations-and-retroactive-consensus.md
     rfc-0004-relay-transport-protocol.md
     rfc-0005-trust-reputation-and-reality-tuner.md
+    rfc-0006-bootstrap-snapshots-and-gateways.md
     rfc-0007-relay-federation-and-replication.md
+    rfc-0008-attestor-capability-manifest-and-evidence-metadata.md
+    rfc-0009-relay-connection-uris-and-qr.md
+    rfc-0010-identity-linking.md
+    rfc-0011-bootstrap-service-hints.md
     rfc-0200-social-content-types-v1.md
     rfc-0100-strata-over-nostr.md         (planned binding)
-    rfc-0101-strata-over-activitypub.md   (planned binding)
+    rfc-0101-strata-over-activitypub.md   (draft binding)
+    rfc-0300-metadata-privacy-transport-profile.md (draft privacy profile)
+    rfc-0301-group-messaging-mls.md       (draft group messaging)
+    rfc-0302-zk-disclosure-and-private-reputation.md (draft ZK disclosure)
   strata-identity/ (reference resolver implementation, Layer 0)
 ```
 
@@ -42,7 +50,7 @@ strata-spec/
 
 | Category | Docs |
 | --- | --- |
-| Protocol (MUST) | RFC‑0000–0004, RFC‑0007, RFC‑0200 (normative: terminology, identity, packets/provenance, attestations, relay transport, relay federation/replication, social content types) |
+| Protocol (MUST) | RFC‑0000–0004, RFC‑0006–0007, RFC‑0200 (normative: terminology, identity, packets/provenance, attestations, relay transport, bootstrap, relay federation/replication, social content types) |
 | Reference (SHOULD) | RFC‑0005 (non‑normative Trust Engine / Reality Switch reference), future reputation profile RFCs |
 | Out‑of‑Scope / Context | whitepaper.md §12–13 (threat model, governance/economics), separate governance notes |
 
@@ -108,9 +116,22 @@ Trust + filtering reference model:
 - Reality Tuner modes (Strict / Standard / Wild)
 - Mapping signals → traffic-light rings (🟢/🟡/🔴)
 
-##### Planned transport bindings
-- `rfcs/rfc-0100-strata-over-nostr.md` — binding for carrying Strata Packets over Nostr (NIP-style extension).
-- `rfcs/rfc-0101-strata-over-activitypub.md` — binding for ActivityPub object/extension mapping.
+##### `rfcs/rfc-0006-bootstrap-snapshots-and-gateways.md`
+
+Bootstrap and gateway discovery:
+- Bootstrap snapshots (`/.well-known/strata/bootstrap-snapshot`)
+- Gatekeeper signature thresholds and diversity anchors
+- App/hardware attestation gating flags for clients
+
+##### Transport bindings
+- `rfcs/rfc-0100-strata-over-nostr.md` — binding for carrying Strata Packets over Nostr (planned).
+- `rfcs/rfc-0101-strata-over-activitypub.md` — binding for ActivityPub object/extension mapping (draft).
+
+##### `rfcs/rfc-0008-attestor-capability-manifest-and-evidence-metadata.md`
+Attestor interoperability conventions (optional):
+- `/.well-known/strata/attestor.json` capability manifest
+- Recommended `method` naming convention
+- Recommended `metadata` schema for tool outputs and evidence references
 
 ## Who Should Read What?
 

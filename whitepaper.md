@@ -213,7 +213,7 @@ Relays are minimal, content‑agnostic servers:
 - Accept Packets from clients.
 - Store them.
 - Forward them to subscribers.
-- Content is referenced via hashes (e.g. IPFS/Arweave).
+- Content is referenced via canonical `0x…` BLAKE3 hashes; packets MAY include optional locator URIs (IPFS/HTTPS/Arweave/etc) as retrieval hints, but bytes MUST be verified against the hash.
 
 Relays may apply local policies (blocking some keys or hashes) but do not interpret decrypted content. Multiple relays can exist in parallel; users and clients choose which to connect to.
 Relay reputation is distinct from user/identity reputation: relays are untrusted utilities measured by performance, not identity. Clients maintain local, per-device “quality of service” scores based on latency, throughput, uptime, and integrity checks, preferring relays that deliver data quickly and honestly and demoting those that throttle or tamper.

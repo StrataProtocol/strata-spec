@@ -5,7 +5,7 @@
 - **Status:** Draft
 - **Author(s):** Strata Core Team
 - **Created:** 2025-11-25
-- **Updated:** 2025-11-28
+- **Updated:** 2025-12-25
 - **Scope:** Normative protocol (Packet wire format, provenance headers, genesis)
 
 > **BREAKING CHANGE (2025-11-26):** `packet_id` and `genesis_id` wire encoding changed from multibase (base58btc) to `0x` + lowercase hex. See RFC-0000 5.2-5.4.  
@@ -77,23 +77,42 @@ Fields:
 Minimal content object:
 ```jsonc
 {
-  "type": "POST",                 // POST | MESSAGE | TRUST_EDGE | ATTESTATION | ATTESTATION_RETRACTION | CORRECTION | CONFIG | ...
+  "type": "POST",                 // POST | MESSAGE | TRUST_EDGE | ATTESTATION | ATTESTATION_RETRACTION | ATTESTATION_DISPUTE | CORRECTION | CONFIG | ...
   "text": "Consensus node deployed.",
   "media": [
     {
-      "media_hash": "ipfs://QmHash...",
+      "media_hash": "0xaf1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262",
       "media_type": "image/jpeg",
-      "size_bytes": 238472
+      "size_bytes": 238472,
+      "media_uris": ["ipfs://QmHash...", "https://cdn.example/media/QmHash"]
     }
   ],
   "thread_ref": null              // optional, reference to another packet_id
 }
 ```
 
+#### 3.2.1 Media References
+
+Each entry in `content.media` is a media reference object. Minimal shape:
+
+```jsonc
+{
+  "media_hash": "0x...",
+  "media_type": "image/jpeg",
+  "size_bytes": 238472,
+  "media_uris": ["ipfs://...", "https://..."] // optional retrieval hints
+}
+```
+
+Rules:
+- `media_hash` **MUST** be content‑addressed to the media bytes (`0x` + hex(BLAKE3‑256(raw_bytes)); RFC‑0000 §5.5).
+- `media_uris` is OPTIONAL and, if present, is a list of untrusted locators that implementations MAY try when fetching the bytes.
+- Implementations **MUST** verify fetched bytes hash to `media_hash` before treating the media as valid.
+
 Fields:
 - `type` – application‑level content type.
 - `text` – optional text body.
-- `media` – array of media references (optional).
+- `media` – array of media references (optional). Each entry **MUST** include `media_hash` (RFC‑0000 §5.5) and MAY include `media_uris` retrieval hints.
 - `thread_ref` – optional packet_id for replies, threads, etc.
 
 Content types are extensible. Clients **SHOULD** gracefully ignore unknown types.
@@ -165,7 +184,7 @@ The provenance_header encodes how media attached to a Packet was created and tra
   "origin_type": "HARDWARE_SECURE_ENCLAVE",
   // HARDWARE_SECURE_ENCLAVE | AI_MODEL | SOFTWARE | UNKNOWN
 
-  "genesis_media_hash": "ipfs://QmGenesisHash...",
+  "genesis_media_hash": "0xaf1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262",
   "device_id": "did:device:pixel_10_abcd",
   "device_signature": "0xSig...",
   "edit_history": [
@@ -174,7 +193,7 @@ The provenance_header encodes how media attached to a Packet was created and tra
       "software_id": "did:software:Adobe_C2PA_Plugin",
       "timestamp": 1715421100,
       "prev_edit_hash": "0xprev",
-      "resulting_media_hash": "ipfs://QmAfterCrop...",
+      "resulting_media_hash": "0x0b68f63dfb0a3b5e4b8c6e2a7e0d7d2c0cc1b5c7a8d9e6f1a2b3c4d5e6f70819",
       "signature": "0xEditSig..."
     }
   ]
@@ -188,7 +207,7 @@ Fields:
   - `SOFTWARE` – software‑generated/edited,
   - `UNKNOWN` – legacy or opaque origin.
 - `genesis_media_hash`:
-  - Content hash of the original media at creation time.
+  - Content hash of the original media bytes at creation time (RFC‑0000 §5.5).
 - `device_id`:
   - DID of the capturing device or device class (optional, for hardware origin).
 - `device_signature`:
@@ -200,7 +219,7 @@ Fields:
     - `software_id` – DID of the software performing the edit (optional),
     - `timestamp` – time of edit,
     - `prev_edit_hash` – hash of the previous edit entry or the genesis media hash,
-    - `resulting_media_hash` – hash of media after the edit,
+    - `resulting_media_hash` – hash of the resulting media bytes after the edit (RFC‑0000 §5.5),
     - `signature` – REQUIRED for `origin_type = HARDWARE_SECURE_ENCLAVE` to maintain green‑ring status; SHOULD be present otherwise.
 
 Rules:
@@ -225,7 +244,8 @@ Clients:
 
 ### 5.1 Media Storage & Availability
 
-- Media referenced by `media_hash` **MUST** be content‑addressed (e.g., IPFS/Arweave hash).
+- `media_hash` **MUST** be content‑addressed to the media bytes (`0x` + hex(BLAKE3‑256(raw_bytes)); RFC‑0000 §5.5).
+- `media_uris` (if present) are **advisory retrieval hints** (e.g., `ipfs://…`, `https://…`, `ar://…`); clients/attestors **MUST** verify fetched bytes hash to `media_hash`.
 - Responsibility for persistence:
   - Authors **SHOULD** pin or otherwise ensure availability of referenced media.
   - Relays **MAY** cache/pin but are not required to store media blobs.
@@ -240,7 +260,7 @@ A Genesis Event is a standalone object that records the initial origin of specif
 ```jsonc
 {
   "genesis_id": "0x1e20b1c2d3e4f5061728394a5b6c7d8e9f0a1b2c3d4e5f6071829304a5b6c7d8e9",
-  "media_hash": "ipfs://QmGenesisHash...",
+  "media_hash": "0xaf1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262",
   "origin_type": "HARDWARE_SECURE_ENCLAVE",
   "details": {
     "hardware": {
@@ -279,7 +299,7 @@ Fields:
 - `genesis_id`:
   - Unique identifier for this Genesis Event.
 - `media_hash`:
-  - Content hash of the original media at creation time.
+  - Content hash of the original media bytes at creation time (RFC‑0000 §5.5).
 - `origin_type`:
   - `HARDWARE_SECURE_ENCLAVE` – hardware‑signed capture,
   - `AI_MODEL` – AI‑generated media,
@@ -487,3 +507,249 @@ Rules:
   - Should be signed by reputable issuers (hardware vendors, model providers) and chained to known roots.
 
 Clients **MUST** treat provenance data as **evidence**, not as guarantees of truth.
+
+## 10. Relay Provenance Verification Requirements
+
+Relays are not merely dumb pipes for provenance claims. To prevent storage pollution and garbage propagation, relays **MUST** enforce cryptographic verification proportional to the trust level claimed.
+
+### 10.1 Verification Tiers
+
+| Claim | Required Proof | Relay Action |
+|-------|----------------|--------------|
+| `UNKNOWN` | None | Accept |
+| `SOFTWARE` | Valid `client_attestation` (see §11) | Accept if valid; downgrade to `UNKNOWN` if missing/invalid |
+| `AI_MODEL` | Model provider signature in `issuer_chain` | **VERIFY** signature; REJECT if invalid |
+| `HARDWARE_SECURE_ENCLAVE` | Device signature + `issuer_chain` + optional `attestation_evidence` | **VERIFY** full chain; REJECT if invalid |
+
+### 10.2 Verification Rules
+
+**For `origin_type = UNKNOWN`:**
+- No cryptographic proof required.
+- Relay **MUST** accept.
+- This is the honest default for media with unknown provenance.
+
+**For `origin_type = SOFTWARE`:**
+- If `client_attestation` is present (see §11), relay **MUST** verify the client signature.
+- If `client_attestation` is missing or invalid:
+  - Relay **MUST** mutate `origin_type` to `UNKNOWN` before storage.
+  - Relay **MUST NOT** reject the packet (preserves openness).
+- This ensures unsigned/bootleg clients can still use the network but cannot claim provenance.
+
+**For `origin_type = AI_MODEL`:**
+- Relay **MUST** verify:
+  1. `issuer_chain` is present and non-empty.
+  2. Final issuer signature is valid over the genesis/provenance data.
+  3. Chain terminates at a known model provider root (from bootstrap documents or relay config).
+- If verification fails: **REJECT** with `ERROR code: "invalid_provenance"`.
+
+**For `origin_type = HARDWARE_SECURE_ENCLAVE`:**
+- Relay **MUST** verify:
+  1. `device_signature` is present and valid.
+  2. `device_id` resolves to a public key.
+  3. `issuer_chain` chains `device_id` to a hardware manufacturer root.
+  4. If `attestation_evidence` is present, it **MUST** be validated per §6.3.
+- If any verification fails: **REJECT** with `ERROR code: "invalid_provenance"`.
+
+### 10.3 Rationale
+
+This design is **decentralized, not centralized** because:
+
+1. **Verification is deterministic** – any relay performs identical checks; no judgment calls.
+2. **Rules are protocol-defined** – in this RFC, not controlled by any single entity.
+3. **Cryptographic proofs are universal** – Ed25519/ECDSA verification is math, not policy.
+4. **No gatekeepers** – bootleg clients work; they just can't claim what they can't prove.
+5. **Garbage rejected at source** – prevents pollution of shared infrastructure.
+
+The alternative ("store everything, let clients verify") harms decentralization by:
+- Polluting storage that all participants depend on.
+- Wasting bandwidth distributing unverifiable claims.
+- Requiring all clients to repeat identical verification work.
+- Allowing bad actors to poison the commons.
+
+### 10.4 Error Codes
+
+New error codes for provenance verification failures:
+
+| Code | Meaning |
+|------|---------|
+| `invalid_provenance` | Cryptographic proof for claimed `origin_type` failed verification |
+| `missing_proof` | High-trust claim made without required cryptographic evidence |
+| `invalid_issuer_chain` | `issuer_chain` signature verification failed or doesn't terminate at known root |
+| `invalid_attestation` | `attestation_evidence` failed platform-specific verification |
+
+## 11. Client Attestation for Provenance Claims
+
+To prevent garbage pollution while preserving network openness, provenance claims above `UNKNOWN` require **client attestation** – proof that the publishing software is a known, signed application.
+
+### 11.1 Design Principles
+
+1. **Open network** – Any client can connect, publish, and subscribe.
+2. **No pollution** – Only attested clients can claim provenance.
+3. **No central authority** – Client developers self-register; reputation is earned.
+4. **Honest defaults** – Unattested clients operate normally with `origin_type = UNKNOWN`.
+
+### 11.2 Client Attestation Structure
+
+Packets claiming `origin_type` other than `UNKNOWN` **MUST** include a `client_attestation` field in `provenance_header`:
+
+```jsonc
+{
+  "provenance_header": {
+    "origin_type": "SOFTWARE",
+    "genesis_media_hash": "0x...",
+    "edit_history": [],
+
+    "client_attestation": {
+      "client_id": "did:strata:zStrataXOfficial",
+      "client_version": "1.0.0",
+      "client_signature": "0x...",
+      "platform_attestation": { ... }  // optional, for elevated trust
+    }
+  }
+}
+```
+
+Fields:
+
+- `client_id` – StrataID (DID) of the client software/developer.
+- `client_version` – Semantic version of the client.
+- `client_signature` – Signature by `client_id`'s key over:
+  ```
+  sign(SHA256(packet_id_preimage || origin_type || genesis_media_hash), client_private_key)
+  ```
+  where `packet_id_preimage` is the canonicalized packet without `packet_id` and `signature`.
+- `platform_attestation` – Optional platform-specific proof (see §11.4).
+
+### 11.3 Client Registration
+
+Client developers register by publishing a `CLIENT_MANIFEST` packet:
+
+```jsonc
+{
+  "content": {
+    "type": "CLIENT_MANIFEST",
+    "client_id": "did:strata:zStrataXOfficial",
+    "name": "StrataX",
+    "description": "Official Strata client for iOS/Android/Web",
+    "homepage": "https://strata.dev",
+    "platforms": ["ios", "android", "web"],
+    "bundle_ids": {
+      "ios": "dev.strata.stratax",
+      "android": "dev.strata.stratax"
+    },
+    "public_keys": [
+      {
+        "key_id": "key-2025-01",
+        "public_key": "0x...",
+        "valid_from": 1704067200,
+        "valid_until": 1735689600
+      }
+    ],
+    "attestation_support": ["apple-app-attest", "play-integrity"]
+  },
+  "author_id": "did:strata:zStrataXOfficial",
+  "signature": "0x..."
+}
+```
+
+Rules:
+
+- `client_id` **MUST** match `author_id` (self-signed manifest).
+- `public_keys` array allows key rotation; relays/clients use `valid_from`/`valid_until` windows.
+- Manifests are discovered via relay queries or bootstrap document hints.
+
+### 11.4 Platform Attestation (Elevated Trust)
+
+For elevated trust (yellow-green status), clients **MAY** include platform attestation proving the app is genuine and unmodified:
+
+**iOS (App Attest):**
+
+```jsonc
+{
+  "platform_attestation": {
+    "format": "apple-app-attest",
+    "payload": "base64url(CBOR attestation from DCAppAttestService)",
+    "nonce": "base64url(SHA256(packet_id_preimage || media_hash))"
+  }
+}
+```
+
+**Android (Play Integrity):**
+
+```jsonc
+{
+  "platform_attestation": {
+    "format": "play-integrity",
+    "payload": "base64url(integrity token JWT)",
+    "nonce": "base64url(SHA256(packet_id_preimage || media_hash))"
+  }
+}
+```
+
+Verification:
+
+1. Verify platform-specific attestation per §6.3.
+2. Verify `nonce` matches expected calculation.
+3. Verify app bundle ID / package name matches `CLIENT_MANIFEST.bundle_ids`.
+4. If all pass: elevated trust (yellow-green).
+5. If missing or invalid: standard SOFTWARE trust (yellow).
+
+### 11.5 Relay Behavior
+
+**On receiving a packet with `origin_type != UNKNOWN`:**
+
+1. Extract `client_attestation` from `provenance_header`.
+2. If missing:
+   - Mutate `provenance_header.origin_type` to `UNKNOWN`.
+   - Remove any invalid claims.
+   - Continue processing (do not reject).
+3. If present:
+   - Resolve `client_id` to public key (from cached `CLIENT_MANIFEST` or via lookup).
+   - Verify `client_signature`.
+   - If invalid: mutate to `UNKNOWN` (do not reject).
+   - If valid: preserve `origin_type`.
+4. For `AI_MODEL` and `HARDWARE_SECURE_ENCLAVE`: apply additional verification per §10.2.
+
+### 11.6 Client Tiers Summary
+
+| Client Type | Network Access | Provenance Claims | Trust Level |
+|-------------|----------------|-------------------|-------------|
+| Unsigned/bootleg | Full | Forced to `UNKNOWN` | Minimal |
+| Signed (valid `client_attestation`) | Full | Can claim `SOFTWARE` | Yellow |
+| Signed + platform attestation | Full | Can claim `SOFTWARE` with elevated trust | Yellow-Green |
+| Hardware device | Full | Can claim `HARDWARE_SECURE_ENCLAVE` | Green (if verified) |
+
+### 11.7 Reputation and Accountability
+
+- **Client reputation accrues to `client_id`** – if a client produces garbage, its reputation suffers.
+- **Users can choose trusted clients** – via local policy or community consensus lists.
+- **Malicious clients can be blocklisted** – relays and users can refuse to honor attestations from known-bad clients.
+- **No central authority** – reputation is emergent from network behavior, not assigned.
+
+## 12. Implementation Notes
+
+### 12.1 Relay Implementation Checklist
+
+For provenance verification:
+
+- [ ] Validate `origin_type` is one of: `UNKNOWN`, `SOFTWARE`, `AI_MODEL`, `HARDWARE_SECURE_ENCLAVE`
+- [ ] For `SOFTWARE`: verify `client_attestation` if present; downgrade to `UNKNOWN` if invalid
+- [ ] For `AI_MODEL`: verify `issuer_chain` signatures; reject if invalid
+- [ ] For `HARDWARE_SECURE_ENCLAVE`: verify `device_signature`, `issuer_chain`, and optional `attestation_evidence`; reject if invalid
+- [ ] Cache `CLIENT_MANIFEST` packets for efficient `client_id` resolution
+- [ ] Return appropriate error codes (§10.4) for verification failures
+
+### 12.2 Client Implementation Checklist
+
+For claiming provenance:
+
+- [ ] Publish `CLIENT_MANIFEST` with rotating keys
+- [ ] Sign packets with `client_attestation` when claiming `SOFTWARE`
+- [ ] Include `platform_attestation` when available (iOS/Android)
+- [ ] Handle graceful degradation when relay downgrades to `UNKNOWN`
+
+### 12.3 Backwards Compatibility
+
+- Packets without `client_attestation` are valid but will have `origin_type` downgraded to `UNKNOWN`.
+- Existing clients continue to work; they just cannot claim verified provenance.
+- Relays **SHOULD** log provenance downgrades for debugging during transition period.

@@ -5,7 +5,7 @@
 - **Status:** Draft
 - **Author(s):** Strata Core Team
 - **Created:** 2025-11-25
-- **Updated:** 2025-12-02
+- **Updated:** 2025-12-25
 - **Scope:** Normative protocol (identity, DIDs, trust edges)
 
 ---
@@ -91,6 +91,7 @@ A Strata DID Document MUST include:
 
 - It **MAY** include:
   - Additional keys (for rotation or multi‑device),
+  - `recovery_policy` for threshold recovery requirements (see §5.3.1),
   - Service endpoints (e.g., preferred relays),
   - Metadata (e.g., human‑readable name).
 
@@ -161,8 +162,47 @@ The protocol supports:
   - Packets include the author’s DID; signature verification uses the current or historical keys.
 - **Recovery keys:**
   - DID Documents **MAY** declare dedicated recovery verification methods (e.g., `usage: "recovery"`).
-  - Recovery keys **MUST** be offline or hardware-backed and **MUST NOT** sign application Packets; their only allowed use is signing `KEY_EVENT` packets when all online keys are lost or revoked.
-  - Clients/relays **MUST** reject application Packets signed by recovery keys and **MUST** accept recovery-signed `KEY_EVENT` only if the recovery key is declared in the DID Document and not revoked.
+  - Recovery keys **MUST** be offline or hardware-backed and **MUST NOT** sign application Packets; their only allowed use is signing `KEY_EVENT` and `RECOVERY_APPROVAL` packets when all online keys are lost or revoked.
+  - Clients/relays **MUST** reject application Packets signed by recovery keys and **MUST** accept recovery-signed `KEY_EVENT` or `RECOVERY_APPROVAL` only if the recovery key is declared in the DID Document and not revoked.
+
+#### 5.3.1 Threshold Recovery (Normative)
+
+If a DID Document includes a `recovery_policy` object, clients and relays **MUST** enforce threshold recovery rules for recovery-signed `KEY_EVENT` packets.
+
+```jsonc
+"recovery_policy": {
+  "threshold": 2,
+  "key_ids": [
+    "did:strata:alice#recovery-1",
+    "did:strata:alice#recovery-2",
+    "did:strata:alice#recovery-3"
+  ]
+}
+```
+
+Rules:
+- `threshold` **MUST** be an integer >= 1.
+- If `key_ids` is omitted or empty, all verification methods with `usage: "recovery"` are eligible.
+- `threshold` **MUST** be <= the number of eligible recovery keys; otherwise clients **MUST** fail closed on recovery-signed `KEY_EVENT`s.
+- A recovery-signed `KEY_EVENT` **MUST** be held pending until approvals from at least `threshold` distinct eligible recovery keys are observed. The signing recovery key counts as one approval.
+
+Recovery approvals are expressed as a `RECOVERY_APPROVAL` Packet:
+
+```jsonc
+{
+  "type": "RECOVERY_APPROVAL",
+  "target_event": "0x...",  // packet_id of the KEY_EVENT being approved
+  "approved_at": 1715421200,
+  "note": "optional"
+}
+```
+
+Rules:
+- `author_id` **MUST** equal the DID referenced by the target `KEY_EVENT`.
+- `target_event` **MUST** reference a valid `KEY_EVENT` `packet_id` for that DID.
+- The Packet **MUST** be signed by an eligible recovery key; duplicate approvals from the same key **MUST** be ignored.
+- `RECOVERY_APPROVAL` Packets **MUST NOT** change key state on their own; they only count toward threshold.
+- Threshold approvals **MUST NOT** bypass the recovery delay/dispute window if one is configured.
 
 **Recovery Key Safeguards (RECOMMENDED):**
 
@@ -177,6 +217,19 @@ The protocol supports:
   All such keys are controlled by the same user.
 
 Recovery mechanisms (social recovery, encrypted backups) are left to client implementations but SHOULD be surfaced in user interfaces.
+
+#### 5.4 Hardware-backed custody (Recommended)
+
+Hardware-backed custody refers to private keys that are generated, stored, and used inside a hardware-backed module where key material is non-exportable (Secure Enclave, StrongBox, TPM, HSM, or a security key).
+
+Guidelines:
+- Clients SHOULD prefer non-exportable Ed25519 keys when the platform supports them.
+- If a platform cannot sign with Ed25519 inside hardware, clients MAY store the Ed25519 key encrypted with a hardware-bound wrapping key (including passkey-gated access) and require explicit user presence to unwrap for signing.
+- Recovery keys SHOULD be hardware-backed or stored offline and MUST NOT be kept on the same device as daily signing keys.
+- Clients SHOULD require explicit user presence for high-risk operations (KEY_EVENT, RECOVERY_APPROVAL, identity linking).
+- Implementations MUST clearly disclose to the user when a key is software-only versus hardware-backed.
+
+Operators (relays, gates, attestors) SHOULD use HSM-backed signing keys for infrastructure identities to reduce key exfiltration risk and SHOULD maintain audited key-rotation procedures.
 
 ### 5.4 Revocation & Validity Windows
 
@@ -414,7 +467,8 @@ As of 2025-11-27, the following features from this RFC are implemented:
   - Integrated into packet verification via `VMResolver` interface
 
 - Section 5.3 Recovery key restrictions: Enforced in KEY_EVENT validation
-  - Recovery keys (usage: "recovery") can ONLY sign KEY_EVENT packets
+  - Recovery keys (usage: "recovery") can ONLY sign KEY_EVENT or RECOVERY_APPROVAL packets
+  - RECOVERY_APPROVAL packets must be signed by recovery keys
   - `IsRecoveryKeyAuthorized(vm, contentType)` checks in Go and TypeScript
 
 **strata-relay (Go)**:

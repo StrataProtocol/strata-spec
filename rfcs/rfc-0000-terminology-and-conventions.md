@@ -219,6 +219,22 @@ Rationale:
 - DIDs follow W3C DID Core conventions which use multibase for method-specific identifiers.
 - Content-addressed IDs use hex for debuggability, tooling compatibility, and alignment with Ethereum/IPFS ecosystem conventions.
 
+### 5.5 `media_hash` and Other Byte-Hash Identifiers
+
+Some Strata fields identify **raw bytes** (media blobs, thumbnails, attachments, external analysis reports, etc.). Unless a more specific RFC section says otherwise, any field explicitly described as a “hash of bytes” **MUST** use the same canonical scheme:
+
+```text
+0x + hex(blake3-256(raw_bytes))
+```
+
+Rules:
+- The hex encoding **MUST** be lowercase.
+- Implementations **MUST** use `BLAKE3-256` (see §5.1).
+- Conformant implementations **MUST NOT** emit URI-form identifiers (e.g., `ipfs://…`, `ar://…`) in byte-hash fields.
+- If a schema provides locator fields (e.g., `media_uris`, `report_uri`), those are **retrieval hints only**; fetched bytes **MUST** be verified against the corresponding hash field before being trusted.
+
+**Backwards compatibility note:** Earlier drafts/examples sometimes used IPFS CIDs directly in `media_hash`. Going forward, implementations SHOULD place such values in `media_uris` (retrieval hints) and use `media_hash` for the canonical `0x…` BLAKE3 identifier.
+
 ## 6. Time & Timestamps
 
 - All timestamps in Strata structures **MUST** use Unix epoch seconds (integer, UTC).
@@ -271,6 +287,7 @@ Values (initial):
 - `KEY_EVENT`
 - `CONSENSUS_METRIC`
 - `CORRECTION`
+- `RELAY_DESCRIPTOR`
 - Additional types may be defined by future RFCs.
 
 ## 8. Security & Privacy Notes

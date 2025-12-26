@@ -12,7 +12,7 @@
 
 Standardizes social content types and shapes for Strata apps (STRATAX, STRATAZ, STRATAF, CTRL+F5):
 - Extends `content.type = "POST"` semantics,
-- Introduces `PROFILE`, `SOCIAL_EDGE`, `SOCIAL_EDGE_REVOCATION`, `REACTION`, `GROUP`, `GROUP_MEMBERSHIP`,
+- Introduces `PROFILE`, `SOCIAL_EDGE`, `SOCIAL_EDGE_REVOCATION`, `REACTION`, `GROUP`, `GROUP_MEMBERSHIP`, `LIST`, `LIST_MEMBERSHIP`,
 - Encourages reuse across apps instead of bespoke schemas.
 
 Designed to interoperate with Packets/provenance (RFC‑0002), identity/trust edges (RFC‑0001), attestations (RFC‑0003), Trust Engine (RFC‑0005), and relay transport (RFC‑0004).
@@ -39,23 +39,24 @@ Use `media` array from RFC‑0002 §3.2; include `provenance_header` when non‑
 
 ```jsonc
 {
-  "media_hash": "ipfs://Qm...",
+  "media_hash": "0xaf1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262",
   "media_type": "video/mp4",
   "size_bytes": 123456,
+  "media_uris": ["ipfs://Qm...", "https://cdn.example/media/Qm..."],
   "duration_seconds": 12.3,
   "width": 1080,
   "height": 1920,
   "variants": [
     {
       "label": "thumb",
-      "media_hash": "ipfs://QmThumb...",
+      "media_hash": "0x0b68f63dfb0a3b5e4b8c6e2a7e0d7d2c0cc1b5c7a8d9e6f1a2b3c4d5e6f70819",
       "media_type": "image/webp",
       "width": 320,
       "height": 568
     },
     {
       "label": "720p",
-      "media_hash": "ipfs://Qm720p...",
+      "media_hash": "0x8f2a4c6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a",
       "media_type": "video/mp4",
       "width": 720,
       "height": 1280,
@@ -153,7 +154,7 @@ For posts with URLs:
     "description": "Short summary...",
     "site_name": "Example News",
     "image": {
-      "media_hash": "ipfs://QmPreview...",
+      "media_hash": "0x1e208f2c3a4b5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6",
       "media_type": "image/webp",
       "width": 1200,
       "height": 630
@@ -211,14 +212,15 @@ Video itself remains in `media`. STRATAZ SHOULD treat as vertical, swipeable, an
   "profile_id": "did:strata:alice",
   "display_name": "Alice Example",
   "handle": "alice",
+  "account_mode": "PUBLIC",
   "bio": "Bio text...",
   "location": "Berlin, DE",
   "avatar": {
-    "media_hash": "ipfs://QmAvatar...",
+    "media_hash": "0x9bcb25c9adc112b7cc9a93cae41f3262af1349b9f5f9a1a6a0404dea36dcc949",
     "media_type": "image/png"
   },
   "banner": {
-    "media_hash": "ipfs://QmBanner...",
+    "media_hash": "0x7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e",
     "media_type": "image/jpeg"
   },
   "links": [
@@ -233,9 +235,38 @@ Video itself remains in `media`. STRATAZ SHOULD treat as vertical, swipeable, an
 
 Rules:
 - `author_id` **MUST** equal `profile_id` for canonical self‑profiles.
+- `account_mode` OPTIONAL. Valid values: `PUBLIC` (default) or `PROTECTED`.
 - Third‑party profiles MAY use `profile_id ≠ author_id`; clients SHOULD treat separately from self‑authored profiles.
 - For self-authored profiles (`author_id` equals `profile_id`), the latest valid PROFILE Packet by `received_at` MUST be treated as canonical for display purposes (display_name, avatar, handle, bio, etc.).
 - Clients MAY maintain separate views for third-party profiles (`author_id` differs from `profile_id`), but these MUST NOT override the canonical self-profile in default UX.
+
+### 6.2 Account mode: PROTECTED (optional)
+
+`PROTECTED` indicates the author expects follow approvals and reduced visibility for non-approved users.
+
+Clients that honor `PROTECTED`:
+- SHOULD require follow approval before treating a follower as active.
+- SHOULD hide followers/following lists from non-approved viewers.
+- SHOULD default new posts to a followers-only audience where such a concept exists.
+- MUST warn that this does not guarantee privacy unless relays enforce access control or content is encrypted.
+
+### 6.3 Relay enforcement options (optional)
+
+Relays MAY choose to enforce `PROTECTED` account visibility. This requires a viewer identity (AUTH) and a discoverable approval signal.
+
+Options:
+- **None (default):** Relay does not enforce. Clients handle visibility locally.
+- **Soft enforcement:** Relay hides protected content from non-approved viewers but may still allow profile fetches.
+- **Strict enforcement:** Relay denies protected content and profile access to non-approved viewers.
+
+If a relay enforces `PROTECTED`:
+- It MUST require client authentication to determine the viewer DID.
+- It MUST define how approvals are evaluated (e.g., `FOLLOW_REQUEST` + `FOLLOW_APPROVAL` in `GLOBAL` or `APP:<APP_ID>` scope).
+- It SHOULD advertise enforcement policy in its relay descriptor/manifest (RFC-0007).
+- It SHOULD avoid federating protected content to peers that do not enforce equivalent policy.
+
+Relays are not required to implement enforcement for interoperability.
+Official Strata relays SHOULD use `strict` enforcement.
 
 ## 7. SOCIAL_EDGE and SOCIAL_EDGE_REVOCATION
 
@@ -262,6 +293,7 @@ Represents social relations (follows/blocks/mutes), distinct from TRUST_EDGE use
 Rules:
 - `author_id` **MUST** equal `from`.
 - `relation` initial values: `FOLLOW`, `BLOCK`, `MUTE`, `CLOSE_FRIEND`.
+- `BLOCK` and `MUTE` are privacy-sensitive; see §7.4 for client handling.
 - Group membership MUST be expressed with `GROUP` + `GROUP_MEMBERSHIP` (see §9); `MEMBER` is not valid for SOCIAL_EDGE.
 - `created_at` SHOULD mirror Packet timestamp; prefer `received_at` for ordering.
 
@@ -294,6 +326,33 @@ Rules:
 - Sets effective presence of `(from, to, relation, scope)` to absent for all SOCIAL_EDGE with `created_at <= revocation.created_at`.
 - `revokes` OPTIONAL; points to specific SOCIAL_EDGE `packet_id`s.
 - Clients SHOULD keep history but compute an effective graph per `(from, to, relation, scope)`.
+
+### 7.4 Privacy-sensitive relations (BLOCK / MUTE)
+
+`BLOCK` and `MUTE` are sensitive relationship signals and SHOULD NOT be published by default.
+
+Guidance:
+- Clients SHOULD treat BLOCK/MUTE as local preference state unless the user explicitly opts in to publishing them.
+- Clients MAY offer an opt-in "publish block signal" option; if enabled, clients MUST warn that the relation is public and queryable.
+- Clients MUST NOT assume network visibility for BLOCK/MUTE; absence of a public edge does not imply absence of a local block/mute.
+- Relays and indexers MUST continue to treat BLOCK/MUTE edges as ordinary SOCIAL_EDGE packets when they are published.
+
+### 7.5 Follow requests for protected accounts (optional)
+
+When a profile declares `account_mode = "PROTECTED"`, clients SHOULD use follow requests.
+
+`relation` values:
+- `FOLLOW_REQUEST` indicates a pending request to follow a protected account.
+- `FOLLOW_APPROVAL` indicates approval by the protected account for a requester.
+
+Guidance:
+- A requester SHOULD publish `FOLLOW_REQUEST` from requester → protected account.
+- The protected account SHOULD publish `FOLLOW_APPROVAL` from protected account → requester.
+- Clients SHOULD treat a follower as active only when a non-revoked `FOLLOW_REQUEST` and `FOLLOW_APPROVAL` exist for the same `(requester, protected)` pair.
+- To preserve existing followers when switching to `PROTECTED`, clients and relays MAY treat a non-revoked `FOLLOW` edge that predates the switch as an implicit approval.
+- For public accounts, clients SHOULD use `FOLLOW` directly, not `FOLLOW_REQUEST`.
+
+This is a social-layer signal only; relays are not required to enforce visibility or access control. If approvals are kept local-only, relays cannot enforce PROTECTED visibility.
 
 ## 8. REACTION – likes and emoji reactions
 
@@ -336,11 +395,11 @@ Clients SHOULD ensure at most one active reaction per `(from, target_packet, rea
   "visibility": "PUBLIC",
   "open_membership": false,
   "avatar": {
-    "media_hash": "ipfs://QmGroupAvatar...",
+    "media_hash": "0x36dcc9499bcb25c9adc112b7cc9a93cae41f3262af1349b9f5f9a1a6a0404dea",
     "media_type": "image/png"
   },
   "banner": {
-    "media_hash": "ipfs://QmGroupBanner...",
+    "media_hash": "0x3a4b5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a",
     "media_type": "image/jpeg"
   },
   "rules": "Markdown or text...",
@@ -401,28 +460,90 @@ Clients MUST compute the effective membership by:
 3. For each Packet, checking authorization rules above before applying the membership change.
 4. Ignoring Packets that fail authorization checks.
 
-## 10. Interactions with trust, attestations, and Reality Switch
+## 10. LIST and LIST_MEMBERSHIP – user-curated lists
+
+User-curated lists allow users to organize other users into named collections for custom timeline viewing (e.g., "Photographers", "News Sources").
+
+### 10.1 LIST
+
+Defines a user-curated list.
+
+```jsonc
+{
+  "type": "LIST",
+  "list_id": "0xListPacketId",
+  "name": "Photographers",
+  "description": "My favorite photographers on Strata.",
+  "visibility": "PUBLIC",
+  "created_at": 1715421500,
+  "app_metadata": { ... }
+}
+```
+
+Fields:
+- `author_id` is the list owner.
+- `list_id` SHOULD equal this Packet's `packet_id`.
+- `visibility`: `PUBLIC` | `PRIVATE`. Private lists are only visible to the owner.
+- `name` (required): Display name for the list.
+- `description` (optional): Description text.
+- `created_at`: Unix timestamp of list creation.
+
+**Updates:** To update list metadata (name, description, visibility), emit a new LIST Packet with the same `list_id`; clients SHOULD use the latest by `received_at`.
+
+**Deletion:** Use CORRECTION with `action: "retract"` targeting the LIST Packet.
+
+### 10.2 LIST_MEMBERSHIP
+
+Adds a user to a list.
+
+```jsonc
+{
+  "type": "LIST_MEMBERSHIP",
+  "list_id": "0xListPacketId",
+  "member_did": "did:strata:bob",
+  "added_at": 1715421600,
+  "app_metadata": { ... }
+}
+```
+
+Fields:
+- `author_id` **MUST** equal the list owner (the `author_id` of the referenced LIST Packet).
+- `list_id`: References the LIST Packet's `list_id`.
+- `member_did`: The DID being added to the list.
+- `added_at`: Unix timestamp of addition.
+
+**Removal:** Use CORRECTION with `action: "retract"` targeting the LIST_MEMBERSHIP Packet.
+
+**Authorization:** Only the list owner may emit LIST_MEMBERSHIP Packets for their lists; Packets from other authors MUST be ignored.
+
+**Validation:** Clients compute effective list membership by:
+1. Finding the latest LIST Packet for a given `list_id` by `received_at`.
+2. Processing LIST_MEMBERSHIP Packets in `received_at` order.
+3. Checking that `author_id` matches the list owner before applying membership.
+4. Ignoring Packets that fail authorization or have been retracted via CORRECTION.
+
+## 11. Interactions with trust, attestations, and Reality Switch
 
 - TRUST_EDGE / TRUST_REVOCATION (RFC‑0001) remain distinct from SOCIAL_EDGE.
 - Attestations targeting POST (e.g., `MANIPULATED`, `OUT_OF_CONTEXT`) SHOULD be surfaced across apps and fed into Reality Switch (RFC‑0005).
 - SOCIAL_EDGE relations may hint Web‑of‑Trust inputs but SHOULD NOT replace explicit TRUST_EDGEs for reputation.
 
-## 11. App mappings (non-normative)
+## 12. App mappings (non-normative)
 
-### 11.1 STRATAX (X-style microblog)
-- Uses POST (`ORIGINAL`, `REPLY`, `REPOST`, `QUOTE`), PROFILE, SOCIAL_EDGE/REVOCATION (follows/blocks/mutes), REACTION (likes), MESSAGE (RFC‑0002).
+### 12.1 STRATAX (X-style microblog)
+- Uses POST (`ORIGINAL`, `REPLY`, `REPOST`, `QUOTE`), PROFILE, SOCIAL_EDGE/REVOCATION (follows/blocks/mutes), REACTION (likes), MESSAGE (RFC‑0002), LIST + LIST_MEMBERSHIP for curated timelines.
 - Follows: SOCIAL_EDGE `relation = "FOLLOW"`, `scope = "APP:STRATAX"` or `GLOBAL`.
 
-### 11.2 STRATAZ (short-form video)
+### 12.2 STRATAZ (short-form video)
 - Uses POST with `post_kind = "SHORT_VIDEO"`, PROFILE, SOCIAL_EDGE (follows), REACTION (likes/emoji); emphasizes provenance/attestations.
 
-### 11.3 STRATAF (Facebook-style)
+### 12.3 STRATAF (Facebook-style)
 - Uses POST (`ORIGINAL`, `ARTICLE`, `STORY`), PROFILE, SOCIAL_EDGE (friends/follows), GROUP + GROUP_MEMBERSHIP for communities; feeds filter POST by group context.
 
-### 11.4 CTRL+F5 (news hub)
+### 12.4 CTRL+F5 (news hub)
 - Uses POST (`ARTICLE` + `article` payload), PROFILE for publishers/journalists, REACTION for reader votes, attestations/retroactive consensus (RFC‑0003) for labeling.
 
-## 12. Backwards compatibility
+## 13. Backwards compatibility
 
 - POST remains valid with minimal text/media/thread_ref per RFC‑0002.
 - Clients not understanding new fields/types MUST still verify signatures and present fallback UI.

@@ -4,7 +4,7 @@
 - **Status:** Draft
 - **Author(s):** Strata Core Team
 - **Created:** 2025-11-25
-- **Updated:** 2025-11-28
+- **Updated:** 2025-12-25
 - **Scope:** Normative protocol (reference relay transport)
 
 > **Note:** `packet_id` uses `0x` + lowercase hex encoding. See RFC-0000 5.2-5.4.  
@@ -28,7 +28,9 @@ Implementations MAY use different transport mechanisms, but SHOULD offer a WebSo
 Relays:
 
 - **MUST** accept valid Packets from clients.
-- **MUST NOT** modify Packet contents.
+- **MUST NOT** modify Packet contents, except for provenance downgrade per RFC-0002 §10-11.
+- **MUST** verify provenance claims per RFC-0002 §10 (Relay Provenance Verification Requirements).
+- **MUST** verify client attestation per RFC-0002 §11 (Client Attestation for Provenance Claims).
 - **MAY**:
   - Reject Packets based on local policy (e.g. invalid signatures, rate limits),
   - Decline to store or forward specific `packet_id`s or media hashes,
@@ -158,6 +160,10 @@ Common codes:
 - `blocked_author`
 - `unauthenticated`
 - `internal_error`
+- `invalid_provenance` – cryptographic proof for claimed `origin_type` failed (RFC-0002 §10)
+- `missing_proof` – high-trust claim made without required evidence (RFC-0002 §10)
+- `invalid_issuer_chain` – signature chain verification failed (RFC-0002 §10)
+- `invalid_attestation` – platform attestation verification failed (RFC-0002 §10)
 
 ### 3.6 UNSUBSCRIBE
 
@@ -300,6 +306,19 @@ Relays MAY log:
 - Packet metadata (IDs, timestamps, author IDs),
 - Generic metrics (counts, sizes),
 - Policy decisions (e.g., blocked, accepted).
+
+### 5.3 Metadata Exposure & Privacy Expectations
+
+Even when `content` is encrypted, relays and network observers can see and log metadata. Clients **MUST NOT** represent Strata as metadata-private.
+
+Clients **SHOULD** surface a clear notice that the following are observable by relays:
+- Connection source (IP address or proxy endpoint),
+- Subscription filters (authors, types, time bounds, limits),
+- Packet metadata (`packet_id`, `author_id`, timestamps, `content.type`),
+- Packet sizes and send/receive timing,
+- Relay authentication and rate-limit events.
+
+Relays **SHOULD** minimize retention of connection logs and metadata. High-risk clients **SHOULD** offer mitigations such as privacy-preserving network paths, multi-relay strategies, and pseudonymous identities.
 
 ## 6. Relay Policies
 

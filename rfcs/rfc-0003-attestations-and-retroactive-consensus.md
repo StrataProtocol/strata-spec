@@ -5,7 +5,7 @@
 - **Status:** Draft
 - **Author(s):** Strata Core Team
 - **Created:** 2025-11-25
-- **Updated:** 2025-12-02
+- **Updated:** 2025-12-25
 - **Scope:** Normative protocol (attestations, retroactive consensus wire semantics)
 
 > **Note:** `packet_id` and content-addressed IDs use `0x` + lowercase hex encoding. See RFC-0000 5.2-5.4.  
@@ -47,8 +47,9 @@ Packets MAY include embedded attestations in the top-level `attestations` array 
     "attestation_id": "0xatt1",
     "attestor_id": "did:strata:official_client",
     "attestor_type": "CLIENT",      // CLIENT | NGO | LAB | MEDIA | MODEL_PROVIDER | IDENTITY_GATE | OTHER
+    "attestation_tier": "AI_ANALYSIS", // LAB_VERIFIED | COMMUNITY | AI_ANALYSIS | OTHER
     "target_packet": "0x1e208f2c3a4b5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7a1",
-    "domain": "PROVENANCE",         // PROVENANCE | CONTENT | SPAM_ABUSE | OTHER
+    "domain": "PROVENANCE",         // PROVENANCE | CONTENT | SPAM_ABUSE | INFRASTRUCTURE | OTHER
     "subject": "ORIGIN_LIKELY_HUMAN",   // see below
     "confidence": 0.87,             // 0–1
     "method": "ML_MODEL_V1",
@@ -63,8 +64,9 @@ Fields:
 - `attestation_id`: unique identifier for this attestation.
 - `attestor_id`: StrataID of the attestor.
 - `attestor_type`: classification (for UX).
+- `attestation_tier` (optional): UX tier classification; see §5.1.
 - `target_packet`: `packet_id` of the Packet being attested. **REQUIRED** for all attestations.
-- `domain` (optional): what category of claim this is about. MUST be one of `PROVENANCE`, `CONTENT`, `SPAM_ABUSE`, or `OTHER`. If omitted, clients **MUST** infer it from `subject` using §4.4 to preserve backwards compatibility. Unknown enum values **MUST** be safely ignored per RFC‑0000 §4.
+- `domain` (optional): what category of claim this is about. MUST be one of `PROVENANCE`, `CONTENT`, `SPAM_ABUSE`, `INFRASTRUCTURE`, or `OTHER`. If omitted, clients **MUST** infer it from `subject` using §4.5 to preserve backwards compatibility. Unknown enum values **MUST** be safely ignored per RFC‑0000 §4.
 - `subject`: claim subject (e.g., ORIGIN_LIKELY_HUMAN).
 - `confidence`: numeric confidence in [0,1].
 - `method`: free‑form description or version string.
@@ -73,6 +75,8 @@ Fields:
 - `signature`: attestor's signature over the attestation payload.
 
 For all attestations (embedded or standalone), the signed payload **MUST** include a `target_packet` field whose value is the `packet_id` of the Packet being attested. Attestations without `target_packet` in the signed payload **MUST** be ignored.
+
+Relay infrastructure attestations **MUST** target a signed relay descriptor packet (`content.type = "RELAY_DESCRIPTOR"`, RFC-0007). In that case, `target_packet` is the descriptor packet_id and `domain` SHOULD be `INFRASTRUCTURE`.
 
 ### 3.2 Standalone Attestation Packet
 
@@ -92,6 +96,7 @@ Attestations MAY also be sent as standalone Packets (`content.type = "ATTESTATIO
       "attestation_id": "0xatt2",
       "attestor_id": "did:ngo:forensic_lab",
       "attestor_type": "LAB",
+      "attestation_tier": "LAB_VERIFIED",
       "domain": "PROVENANCE",
       "subject": "MANIPULATED",
       "confidence": 0.95,
@@ -157,6 +162,36 @@ Attestations, corrections, and retractions are append‑only:
 - Corrections and `ATTESTATION_RETRACTION` Packets are expressed as new Packets referencing the original attestation.
 - Clients **MUST** keep the historical record while applying the latest valid retraction/correction from the original attestor to compute effective weight.
 
+### 3.6 Attestation Dispute Packet
+
+An identity may dispute an attestation without retracting it by publishing a packet with `content.type = "ATTESTATION_DISPUTE"`:
+
+```jsonc
+{
+  "content": {
+    "type": "ATTESTATION_DISPUTE",
+    "target_packet": "0x1e208f2c3a4b5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7a1",
+    "attestation_id": "0xatt2",
+    "dispute_type": "EVIDENCE_CONFLICT",
+    "reason": "Report references an unrelated media hash.",
+    "evidence": {
+      "report_hash": "0x...",
+      "report_uri": "ipfs://...",
+      "report_mime": "application/json",
+      "redactions": ["raw_media_not_included"]
+    },
+    "created_at": 1715423200
+  }
+}
+```
+
+Rules:
+- `author_id` is the disputing identity.
+- Disputes **MUST NOT** retract or invalidate the attestation; they only flag it as contested.
+- `dispute_type` SHOULD be one of: `EVIDENCE_CONFLICT`, `METHODOLOGY_ERROR`, `CONFLICT_OF_INTEREST`, `INSUFFICIENT_EVIDENCE`, or `OTHER`. Unknown values MUST be treated as `OTHER`.
+- `evidence` (optional) follows RFC-0008 evidence metadata conventions (`report_hash`, `report_uri`, `report_mime`, `redactions`).
+- If multiple disputes exist from the same `author_id` for the same `attestation_id`, clients SHOULD use the latest by relay‑observed `received_at` (tie‑break by lexicographically smallest `packet_id`).
+
 ## 4. Claim Types
 
 Attestations are explicitly two-dimensional: `domain` (what kind of thing is being judged) and `subject` (the specific claim). Clients MAY introduce additional subjects over time; unknown values MUST be ignored per RFC‑0000 §4.
@@ -191,13 +226,32 @@ Attestations are explicitly two-dimensional: `domain` (what kind of thing is bei
 - `SCAM`  
   Financial or other fraud attempts.
 
-### 4.4 Domain inference (backwards compatibility)
+### 4.4 Domain: INFRASTRUCTURE
+- `UPTIME_VERIFIED`  
+  Relay availability meets the attestor's SLO for the stated measurement window.
+- `UPTIME_DEGRADED`  
+  Sustained availability issues in the stated measurement window.
+- `DELIVERY_ANOMALY`  
+  Observed delivery inconsistencies across relays (e.g., selective non-delivery or missing replication) without cryptographic proof of intent.
+- `POLICY_MISMATCH`  
+  Observed deviation from the relay's stated policy (e.g., retention or federation behavior).
+- `FEDERATION_HEALTHY`  
+  Replication with expected peers is healthy within stated thresholds.
+- `FEDERATION_DEGRADED`  
+  Replication lag or missing peers outside expected thresholds.
+- `OPERATOR_VERIFIED`  
+  Relay operator identity verified by a trusted attestor (absence is not negative).
+
+Infrastructure attestations are advisory signals for client-side routing and warnings. They MUST NOT be treated as global truth.
+
+### 4.5 Domain inference (backwards compatibility)
 If `domain` is absent, clients **MUST** infer it using:
 
 ```text
 PROVENANCE ← {ORIGIN_LIKELY_HUMAN, ORIGIN_LIKELY_SYNTH, MANIPULATED, UNALTERED_HARDWARE_CAPTURE}
 CONTENT    ← {FACTUAL_INACCURACY, OUT_OF_CONTEXT, CAPTION_MISLEADING, MISATTRIBUTED_SOURCE, FABRICATED_EVENT}
 SPAM_ABUSE ← {SPAM, ABUSIVE, SCAM}
+INFRASTRUCTURE ← {UPTIME_VERIFIED, UPTIME_DEGRADED, DELIVERY_ANOMALY, POLICY_MISMATCH, FEDERATION_HEALTHY, FEDERATION_DEGRADED, OPERATOR_VERIFIED}
 ```
 
 Implementations SHOULD emit `domain` going forward; legacy attestations without it remain valid through this mapping. Each claim type may have its own thresholds and handling in clients.
@@ -216,6 +270,25 @@ Implementations SHOULD emit `domain` going forward; legacy attestations without 
 
 This field is primarily for UX; trust is determined by attestor_id and reputation, not by attestor_type.
 
+### 5.1 Attestation Tiers (Normative)
+
+Attestations MAY include `attestation_tier` to signal how clients SHOULD weight and present the claim:
+
+- `LAB_VERIFIED` — accredited labs, NGOs, media organizations, or identity gates.
+- `COMMUNITY` — community/manual reviewers and unaccredited sources.
+- `AI_ANALYSIS` — automated or model-based analysis.
+- `OTHER` — fallback for unknown tiers (clients SHOULD treat as `COMMUNITY`).
+
+If `attestation_tier` is omitted, clients **MUST** infer it from `attestor_type`:
+
+```text
+LAB_VERIFIED ← {LAB, NGO, MEDIA, IDENTITY_GATE}
+AI_ANALYSIS  ← {MODEL_PROVIDER}
+COMMUNITY    ← {CLIENT, OTHER}
+```
+
+Unknown `attestation_tier` values **MUST** be ignored, and clients **MUST** default to `COMMUNITY` in that case.
+
 ## 6. Trust in Attestations
 
 Clients maintain **attestor policies**:
@@ -232,6 +305,8 @@ For example, a user may:
 Attestor reputation can itself be computed using the same trust and stake mechanisms as any other identity.
 
 Before applying any attestor policies or computing quorum weights, clients **MUST** drop attestations that fail the validation rules in §3.2 (signature and identity consistency checks). Only attestations that pass these checks are eligible to contribute to `R_total` or retroactive consensus.
+
+Disputes (`ATTESTATION_DISPUTE`) are advisory signals. Clients **SHOULD** surface disputes and MAY down‑weight or mark claims as contested based on local policy, but disputes **MUST NOT** zero an attestation’s weight unless a valid retraction exists.
 
 ## 7. Retroactive Consensus
 
@@ -307,7 +382,7 @@ Reference clients SHOULD:
 ### 9. Backwards Compatibility
 - Introduction of new claim types or attestor types MUST be backward compatible.
 - Unknown `domain`, `subject`, or `attestor_type` values MUST be safely ignored by clients, treated as unrecognized but not necessarily untrusted.
-- Attestations without `domain` MUST continue to function via the inference table in §4.4.
+- Attestations without `domain` MUST continue to function via the inference table in §4.5.
 
 ### 10. Reference Implementation Notes
 

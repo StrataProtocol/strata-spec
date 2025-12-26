@@ -5,7 +5,7 @@
 - **Status:** Draft  
 - **Author(s):** Strata Core Team (proposed)  
 - **Created:** 2025-11-27  
-- **Updated:** 2025-11-27  
+- **Updated:** 2025-12-25  
 - **Scope:**  
   - **Normative:** `CONFIG` / `BOOTSTRAP_SNAPSHOT` packet shape and client verification rules  
   - **Non‑normative:** Dynamic bootstrap gateway roles and deployment patterns  
@@ -137,6 +137,7 @@ A **Bootstrap Snapshot** is a normal Data Packet as in RFC‑0002 with:
     "seed_gatekeepers": [
       {
         "id": "did:strata:seed_foundation",
+        "label": "Strata Foundation",
         "weight": 1.0,
         "tags": ["org:strata_foundation"]
       }
@@ -221,6 +222,7 @@ Fields:
 
 - `seed_gatekeepers` – optional array:
   - `id` – StrataID to be used as seed gatekeeper.  
+  - `label` – optional human-friendly name (advisory UI hint only).  
   - `weight` – advisory weight.
   - `tags` – e.g., `["org:ngo", "region:us"]`.
 
@@ -311,7 +313,7 @@ Clients **MUST** treat `bootstrap_docs` entries in a Snapshot as **pointers or r
 For each candidate `bootstrap_id`:
 
 1. Clients **MUST** fetch the corresponding Bootstrap Document (over relays, HTTP, or local cache).  
-2. Clients **MUST** validate it against the pinned bootstrap gatekeeper keys and diversity rules from RFC‑0005 (signature threshold, diversity tags).  
+2. Clients **MUST** validate it against the pinned bootstrap gatekeeper keys and diversity rules from RFC‑0005 (signature threshold, diversity tags). For production clients, the minimum quorum is **at least 3 distinct gatekeeper signatures** and **at least 2 distinct diversity tags** (RFC‑0005 §4.1); clients **MUST** fail closed if quorum is not met. Development/test builds **MAY** relax thresholds but **MUST** surface a clear warning and **MUST NOT** treat relaxed Bootstrap Documents as production‑trust.  
 3. Only after successful validation **MAY** clients treat the referenced Bootstrap Document as authoritative for:
    - relay lists,
    - seed gatekeepers,

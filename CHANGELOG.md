@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Relay descriptor packet type (`RELAY_DESCRIPTOR`) for signed relay metadata (RFC-0000/0007).
+- `INFRASTRUCTURE` attestation domain and relay-focused subjects (RFC-0003).
+- Relay reputation guidance now references infrastructure attestations (RFC-0005).
+
 ## [v0.4.1-spec] - 2025-12-02
 
 ### Added

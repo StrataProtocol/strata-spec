@@ -3,7 +3,7 @@
 - **Status:** Draft  
 - **Author(s):** Strata Core Team  
 - **Created:** 2025-11-25  
-- **Updated:** 2025-12-02
+- **Updated:** 2025-12-25
 - **Scope:** Mixed. §4.1 (Bootstrap Document requirements) is normative when referenced by other RFCs. All other sections are reference (non-normative) and describe recommended Trust Engine / Reality Switch behavior.
 
 ## 1. Summary
@@ -45,6 +45,30 @@ For an identity `i`, a client computes `R_total(i)` from:
    - Consistent non‑abusive activity,
    - Absence of slashing or abuse reports.
 
+### 3.1 Relay Reputation Signals (Non-normative)
+
+Relay reputation is distinct from identity trust. It is a **local, advisory** score that helps clients decide how to route traffic, surface relay quality, and detect misbehavior. There is no global consensus score.
+
+Clients MAY compute relay scores from:
+- **Availability:** successful connects/handshakes, uptime, reconnect churn.
+- **Latency:** connect, AUTH, and publish-ACK round trip times.
+- **Reliability:** recent protocol errors and disconnect reasons.
+- **Rate limiting:** active or recent `rate_limited` responses.
+- **Integrity checks:** multi-relay consistency probes (e.g., compare packet hashes and earliest `received_at` values across relays).
+- **Bootstrap hints:** optional relay scores in Bootstrap Snapshots (RFC-0006).
+- **Infrastructure attestations:** claims about relay behavior targeting signed relay descriptors (RFC-0003, RFC-0007).
+
+**Reference scoring (illustrative):**
+
+```text
+S_relay = w_avail*S_avail + w_latency*S_latency + w_bootstrap*S_bootstrap + w_integrity*S_integrity - penalties
+
+Example weights: w_avail=0.45, w_latency=0.35, w_bootstrap=0.20, w_integrity optional
+Example penalties: rate_limited=0.12, recent_error=0.08, reconnects=0.02*min(attempts, 5)
+All signals normalized to [0, 1].
+```
+
+Clients SHOULD surface relay quality in diagnostics and MAY use it to order relays or select fallbacks. Clients MUST NOT treat relay scores as consensus truth and SHOULD avoid automatic blacklisting without user visibility.
 
 
 ## 4. Reference Trust Score
@@ -212,8 +236,26 @@ For each Packet `P`, the Trust Engine (aka Reality Tuner in earlier drafts) cons
 - `author_id` and `R_total(author_id)`,
 - `provenance_header.origin_type`,
 - Attestations and retroactive consensus status (RFC‑0003),
+- Attestation tiers (RFC‑0003 §5.1),
 - User’s Reality Switch mode,
 - User’s attestor and seed preferences.
+
+#### 6.1.1 Attestation Tier Policy (Recommended)
+
+Attestation tiers communicate *how* to interpret claims for UX and filtering.
+Clients SHOULD apply tier-aware defaults when deciding which attestations can
+trigger warnings, blur, or hide actions:
+
+| Reality Mode | Tiers that can trigger filtering | Notes |
+|--------------|----------------------------------|-------|
+| STRICT | `LAB_VERIFIED` only | Community/AI signals may be shown as context but MUST NOT hide/blur alone. |
+| STANDARD | `LAB_VERIFIED`, `COMMUNITY` | AI analysis is advisory only. |
+| WILD | `LAB_VERIFIED`, `COMMUNITY`, `AI_ANALYSIS` | Automated analysis SHOULD never be the sole reason to hide. |
+
+**Display semantics (UX guidance):**
+- `LAB_VERIFIED` → label “Lab Verified” (strongest evidence).
+- `COMMUNITY` → label “Community” (human opinion / crowd input).
+- `AI_ANALYSIS` → label “AI Analysis” (probabilistic signal).
 
 ### 6.2 Outputs
 - Feed inclusion (show / hide),

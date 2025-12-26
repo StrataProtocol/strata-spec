@@ -16,7 +16,7 @@ Defines how Strata relays federate and replicate data between each other using t
 - Optional replication policy publishing,
 - Safeguards against loops, replay storms, and abuse.
 
-No new Packet types are introduced; this RFC reuses RFC‑0000/0002 Packet format and RFC‑0004 transport.
+This RFC reuses RFC‑0000/0002 Packet format and RFC‑0004 transport, and introduces a signed relay descriptor packet (`RELAY_DESCRIPTOR`) for authoritative relay metadata.
 
 ## 2. Motivation
 
@@ -49,7 +49,7 @@ Each federating relay **MUST** have a StrataID (`did:strata:...`, RFC‑0001) wi
 - `AUTH` messages, and
 - Optional `CONFIG` Packets for replication policy.
 
-Relays **SHOULD** advertise their relay DID in bootstrap documents and HTTP manifests (see §10).
+Relays **SHOULD** advertise their relay DID in bootstrap documents and HTTP manifests (see §10 and §11).
 
 ## 5. Authentication between relays
 
@@ -189,7 +189,58 @@ Rules:
 - `author_id` **MUST** equal `relay_id` when publishing its own policy.
 - Clients MAY display these to users; relays MAY auto‑configure replication from them.
 
-## 10. HTTP relay manifest
+## 10. Signed relay descriptor (RELAY_DESCRIPTOR)
+
+Relays **SHOULD** publish a signed descriptor Packet with `content.type = "RELAY_DESCRIPTOR"` to bind relay identity to endpoints and policy metadata. This packet is authoritative (signed by the relay DID) and is the preferred target for relay infrastructure attestations (RFC-0003).
+
+Example:
+
+```jsonc
+{
+  "content": {
+    "type": "RELAY_DESCRIPTOR",
+    "descriptor_version": 1,
+    "relay_id": "did:strata:relay_eu1",
+    "ws_endpoint": "wss://eu1.relay.example/strata",
+    "http_base_url": "https://eu1.relay.example",
+    "services": {
+      "gate_base_url": "https://gate.relay.example",
+      "id_base_url": "https://id.relay.example"
+    },
+    "policy": {
+      "accepts_public_packets": true,
+      "default_retention_days": 30,
+      "max_backfill_seconds": 604800,
+      "protected_accounts": "none",
+      "protected_scope": "GLOBAL",
+      "supports_social_edges": true
+    },
+    "operator": {
+      "operator_id": "did:strata:relay_operator",
+      "name": "Example Relay Ops"
+    },
+    "software": {
+      "name": "strata-relay",
+      "version": "0.1.0"
+    }
+  },
+  "expires_at": 1731536000
+}
+```
+
+Rules:
+- `author_id` **MUST** equal `relay_id`.
+- `descriptor_version` **MUST** be `1` for this schema.
+- `ws_endpoint` **MUST** be a valid WebSocket URL for the relay.
+- Relays **SHOULD** refresh descriptors before `expires_at`; clients **SHOULD** ignore expired descriptors and prefer the latest by relay-observed `received_at`.
+- Clients **MAY** use the descriptor packet_id as the `target_packet` for `INFRASTRUCTURE` attestations.
+- `policy.protected_accounts` OPTIONAL; values: `none` (default), `soft`, `strict`.
+- If `policy.protected_accounts` is not `none`, relays **SHOULD** require AUTH to evaluate viewer access.
+- `policy.protected_scope` OPTIONAL; if set, MUST be `GLOBAL` or `APP:<APP_ID>` and indicates which follow approvals the relay evaluates.
+- `policy.supports_social_edges` OPTIONAL; when `true`, relay accepts and serves `SOCIAL_EDGE` and `SOCIAL_EDGE_REVOCATION` packets.
+- Official Strata relays **SHOULD** set `policy.protected_accounts` to `strict`.
+
+## 11. HTTP relay manifest
 
 Relays **SHOULD** expose an HTTP manifest at `GET /.well-known/strata-relay.json`:
 
@@ -198,10 +249,17 @@ Relays **SHOULD** expose an HTTP manifest at `GET /.well-known/strata-relay.json
   "relay_id": "did:strata:relay_eu1",
   "ws_endpoint": "wss://eu1.relay.example/strata",
   "status": "operational",
+  "services": {
+    "gate_base_url": "https://gate.relay.example",
+    "id_base_url": "https://id.relay.example"
+  },
   "policy": {
     "accepts_public_packets": true,
     "default_retention_days": 30,
-    "max_backfill_seconds": 604800
+    "max_backfill_seconds": 604800,
+    "protected_accounts": "none",
+    "protected_scope": "GLOBAL",
+    "supports_social_edges": true
   },
   "replication": {
     "accepts_peer_subscriptions": true,
@@ -215,15 +273,17 @@ Relays **SHOULD** expose an HTTP manifest at `GET /.well-known/strata-relay.json
 }
 ```
 
+`services` is optional and provides convenience hints for related HTTP services (e.g., identity gate and ID server). Values MAY be absolute URLs or relay-relative paths.
+
 Manifest is non-authoritative (not signed) and intended for discovery/config convenience only. Authoritative seeds remain signed Bootstrap Documents (RFC-0005/0006).
 
 **Security Note:** Clients SHOULD NOT establish initial protocol trust, accept new relay identities for security-sensitive operations, or update pinned trust roots based solely on an unsigned HTTP manifest. Manifests MAY be used for convenience discovery (e.g., finding WebSocket endpoints), but all trust-relevant decisions MUST be validated against signed Bootstrap Documents and the Web-of-Trust.
 
-## 11. Interaction with transport bindings
+## 12. Interaction with transport bindings
 
 Future bindings (RFC‑0100: Strata over Nostr, RFC‑0101: Strata over ActivityPub) may define replication semantics for bridges. This RFC covers native Strata relay↔relay replication over RFC‑0004. Bridges MUST map external events into canonical Packets before applying these rules.
 
-## 12. Security & privacy considerations
+## 13. Security & privacy considerations
 
 - Replication reveals relay peerings; operators may choose Tor/VPN, limit peers, or omit public manifests.
 - Misbehaving peers: relays **SHOULD** blacklist peers that forward malformed Packets and maintain QoS scores (RFC‑0004 §7).
