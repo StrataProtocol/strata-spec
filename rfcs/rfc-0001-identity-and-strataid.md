@@ -94,6 +94,7 @@ A Strata DID Document MUST include:
   - `recovery_policy` for threshold recovery requirements (see §5.3.1),
   - Service endpoints (e.g., preferred relays),
   - Metadata (e.g., human‑readable name).
+  - Optional key custody hints on verification methods (see §5.4).
 
 Strata does not mandate a specific DID Document registry; DID Documents can be:
 
@@ -228,6 +229,7 @@ Guidelines:
 - Recovery keys SHOULD be hardware-backed or stored offline and MUST NOT be kept on the same device as daily signing keys.
 - Clients SHOULD require explicit user presence for high-risk operations (KEY_EVENT, RECOVERY_APPROVAL, identity linking).
 - Implementations MUST clearly disclose to the user when a key is software-only versus hardware-backed.
+- Clients MAY set `verification_method.custody` to one of: `hardware`, `wrapped`, `software`, `unknown`.
 
 Operators (relays, gates, attestors) SHOULD use HSM-backed signing keys for infrastructure identities to reduce key exfiltration risk and SHOULD maintain audited key-rotation procedures.
 

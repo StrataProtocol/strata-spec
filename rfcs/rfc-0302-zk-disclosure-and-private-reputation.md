@@ -74,7 +74,24 @@ Rules:
 
 Clients that do not understand the statement or proof system MUST ignore the proof and treat the Packet as if no disclosure were present.
 
-## 7. Recommended Statements (Non-Normative)
+### 6.1 Proof system guidance (Recommended)
+
+- Implementations SHOULD prefer transparent setup systems (for example, STARKs or PLONKish/Halo2 variants).
+- If a trusted setup system is used (for example, Groth16), implementers MUST publish setup details and the verifying key reference in the attestor capability manifest (RFC-0008).
+- Proof system identifiers SHOULD include the scheme and curve (for example, `plonk-bn254`, `stark-v1`).
+
+### 6.2 Context binding (Recommended)
+
+To reduce replay and context confusion, proofs SHOULD be bound to a subject and context hash:
+
+- `public_inputs` SHOULD include a `context_hash` derived from the statement ID and a stable context identifier (for example, `author_id`, `packet_id`, or `target_id`).
+- A recommended derivation is `context_hash = blake3-256(canonical({ statement, context }))`, encoded as `0x` + hex.
+
+## 7. Statement Registry and Discovery
+
+Statement identifiers MUST be namespaced and versioned. Implementers SHOULD publish supported statements and proof system details in the attestor capability manifest (RFC-0008) so clients can discover verification requirements.
+
+### 7.1 Recommended Statements (Non-Normative)
 
 Implementations should use explicit, versioned statement identifiers. Suggested initial registry:
 
